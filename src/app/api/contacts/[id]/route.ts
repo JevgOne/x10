@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

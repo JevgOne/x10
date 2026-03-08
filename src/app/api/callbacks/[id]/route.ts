@@ -3,6 +3,8 @@ import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
