@@ -4,6 +4,8 @@ import { eq, like, or, desc } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
