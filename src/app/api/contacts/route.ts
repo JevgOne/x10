@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, like, or, desc } from "drizzle-orm";
+import { eq, like, or, desc, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId } from "@/lib/utils";
 
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   }
 
   const result = await query
-    .where(conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : undefined) : undefined)
+    .where(conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : and(...conditions)) : undefined)
     .orderBy(desc(schema.contacts.createdAt))
     .limit(limit)
     .offset(offset);
