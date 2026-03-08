@@ -117,7 +117,7 @@ export default function ContactsPage() {
   const totalValue = contacts.reduce((s, c) => s + (c.potentialValue || 0), 0);
 
   return (
-    <div className="flex gap-4">
+    <div className="flex gap-4 relative">
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -130,8 +130,8 @@ export default function ContactsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex gap-3 mb-4">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-3 mb-4">
+          <div className="relative flex-1 min-w-[200px]">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt3" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Hledat kontakty..." className="w-full pl-10" />
           </div>
@@ -153,7 +153,7 @@ export default function ContactsPage() {
 
         {/* Table */}
         <div className="glass rounded-2xl border border-border overflow-hidden">
-          <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-2 px-4 py-2.5 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border">
+          <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-2 px-4 py-2.5 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border">
             <span>Jmeno</span><span>Kontakt</span><span>Mesto</span><span>Faze</span><span className="text-right">Hodnota</span>
           </div>
           {loading ? (
@@ -167,34 +167,64 @@ export default function ContactsPage() {
               <div
                 key={c.id}
                 onClick={() => setSelected(c)}
-                className={`grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-2 px-4 py-3 text-sm border-b border-border/50 cursor-pointer transition-colors hover:bg-surface2/50 ${
+                className={`cursor-pointer transition-colors hover:bg-surface2/50 border-b border-border/50 ${
                   selected?.id === c.id ? "bg-accent/5 border-l-2 border-l-accent" : ""
                 }`}
               >
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
-                    {c.firstName?.charAt(0)}
+                {/* Desktop table row */}
+                <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-2 px-4 py-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
+                      {c.firstName?.charAt(0)}
+                    </div>
+                    <div>
+                      <span className="font-medium">{c.firstName} {c.lastName}</span>
+                      {c.hotCold === "hot" && <Flame size={10} className="inline ml-1 text-red" />}
+                      {c.hotCold === "cold" && <Snowflake size={10} className="inline ml-1 text-blue-400" />}
+                    </div>
                   </div>
-                  <div>
-                    <span className="font-medium">{c.firstName} {c.lastName}</span>
-                    {c.hotCold === "hot" && <Flame size={10} className="inline ml-1 text-red" />}
-                    {c.hotCold === "cold" && <Snowflake size={10} className="inline ml-1 text-blue-400" />}
+                  <div className="flex flex-col gap-0.5 text-xs text-txt2 justify-center">
+                    {c.phone && <span className="flex items-center gap-1"><Phone size={10} />{c.phone}</span>}
+                    {c.email && <span className="flex items-center gap-1 truncate"><Mail size={10} />{c.email}</span>}
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-txt2">
+                    {c.city && <><MapPin size={10} />{c.city}</>}
+                  </div>
+                  <div className="flex items-center">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STAGE_COLORS[c.pipelineStage] || "bg-surface3 text-txt3"}`}>
+                      {STAGE_LABELS[c.pipelineStage] || c.pipelineStage}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-end text-xs font-mono text-green">
+                    {formatCZK(c.potentialValue)}
                   </div>
                 </div>
-                <div className="flex flex-col gap-0.5 text-xs text-txt2 justify-center">
-                  {c.phone && <span className="flex items-center gap-1"><Phone size={10} />{c.phone}</span>}
-                  {c.email && <span className="flex items-center gap-1 truncate"><Mail size={10} />{c.email}</span>}
-                </div>
-                <div className="flex items-center gap-1 text-xs text-txt2">
-                  {c.city && <><MapPin size={10} />{c.city}</>}
-                </div>
-                <div className="flex items-center">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STAGE_COLORS[c.pipelineStage] || "bg-surface3 text-txt3"}`}>
-                    {STAGE_LABELS[c.pipelineStage] || c.pipelineStage}
-                  </span>
-                </div>
-                <div className="flex items-center justify-end text-xs font-mono text-green">
-                  {formatCZK(c.potentialValue)}
+                {/* Mobile card */}
+                <div className="md:hidden px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-xs font-bold text-accent shrink-0">
+                      {c.firstName?.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-sm truncate">{c.firstName} {c.lastName}</span>
+                        {c.hotCold === "hot" && <Flame size={10} className="text-red shrink-0" />}
+                        {c.hotCold === "cold" && <Snowflake size={10} className="text-blue-400 shrink-0" />}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-txt2">
+                        {c.phone && <span className="flex items-center gap-1"><Phone size={10} />{c.phone}</span>}
+                        {c.city && <span className="flex items-center gap-1"><MapPin size={10} />{c.city}</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STAGE_COLORS[c.pipelineStage] || "bg-surface3 text-txt3"}`}>
+                        {STAGE_LABELS[c.pipelineStage] || c.pipelineStage}
+                      </span>
+                      {c.potentialValue > 0 && (
+                        <span className="text-[11px] font-mono text-green">{formatCZK(c.potentialValue)}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             ))
@@ -204,8 +234,8 @@ export default function ContactsPage() {
 
       {/* Detail panel */}
       {selected && (
-        <div className="w-80 shrink-0">
-          <div className="glass rounded-2xl border border-border p-5 sticky top-6">
+        <div className="fixed inset-0 z-40 bg-black/50 md:bg-transparent md:relative md:inset-auto md:z-auto md:w-80 md:shrink-0" onClick={(e) => { if (e.target === e.currentTarget) setSelected(null); }}>
+          <div className="glass rounded-2xl border border-border p-5 fixed bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto md:static md:max-h-none md:overflow-visible md:sticky md:top-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-sm font-bold text-accent">

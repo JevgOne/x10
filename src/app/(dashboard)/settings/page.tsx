@@ -114,7 +114,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Uzivatele & Nastaveni</h1>
           <p className="text-sm text-txt3 mt-1">Sprava uzivatelskych uctu a roli</p>
@@ -125,7 +125,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Role summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {Object.entries(ROLE_LABELS).map(([key, label]) => {
           const count = activeUsers.filter((u) => u.role === key).length;
           return (
@@ -151,32 +151,61 @@ export default function SettingsPage() {
       <div>
         <h2 className="text-sm font-bold mb-3">Aktivni uzivatele</h2>
         <div className="glass rounded-2xl border border-border overflow-hidden">
-          <div className="grid grid-cols-[2fr_2fr_1fr_1fr_100px] gap-3 px-5 py-3 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border">
+          <div className="hidden md:grid grid-cols-[2fr_2fr_1fr_1fr_100px] gap-3 px-5 py-3 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border">
             <span>Jmeno</span><span>Email</span><span>Role</span><span>Telefon</span><span className="text-right">Akce</span>
           </div>
 
           {activeUsers.map((u) => (
-            <div key={u.id} className="grid grid-cols-[2fr_2fr_1fr_1fr_100px] gap-3 px-5 py-3 text-sm border-b border-border/50 hover:bg-surface2/50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-xs font-bold text-accent shrink-0">
-                  {u.name.charAt(0)}
+            <div key={u.id} className="border-b border-border/50 hover:bg-surface2/50 transition-colors group">
+              {/* Desktop row */}
+              <div className="hidden md:grid grid-cols-[2fr_2fr_1fr_1fr_100px] gap-3 px-5 py-3 text-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-xs font-bold text-accent shrink-0">
+                    {u.name.charAt(0)}
+                  </div>
+                  <span className="font-medium truncate">{u.name}</span>
                 </div>
-                <span className="font-medium truncate">{u.name}</span>
+                <div className="flex items-center text-txt2 text-xs truncate">{u.email}</div>
+                <div className="flex items-center">
+                  <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg border ${ROLE_COLORS[u.role] || "bg-surface3 text-txt3"}`}>
+                    {ROLE_LABELS[u.role] || u.role}
+                  </span>
+                </div>
+                <div className="flex items-center text-xs text-txt2">{u.phone || "—"}</div>
+                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => openEdit(u)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-accent" title="Upravit">
+                    <Edit2 size={12} />
+                  </button>
+                  <button onClick={() => deleteUser(u.id)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-red" title="Deaktivovat">
+                    <Ban size={12} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center text-txt2 text-xs truncate">{u.email}</div>
-              <div className="flex items-center">
-                <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg border ${ROLE_COLORS[u.role] || "bg-surface3 text-txt3"}`}>
-                  {ROLE_LABELS[u.role] || u.role}
-                </span>
-              </div>
-              <div className="flex items-center text-xs text-txt2">{u.phone || "—"}</div>
-              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEdit(u)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-accent" title="Upravit">
-                  <Edit2 size={12} />
-                </button>
-                <button onClick={() => deleteUser(u.id)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-red" title="Deaktivovat">
-                  <Ban size={12} />
-                </button>
+              {/* Mobile card */}
+              <div className="md:hidden px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-xs font-bold text-accent shrink-0">
+                    {u.name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm truncate">{u.name}</span>
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg border ${ROLE_COLORS[u.role] || "bg-surface3 text-txt3"}`}>
+                        {ROLE_LABELS[u.role] || u.role}
+                      </span>
+                    </div>
+                    <div className="text-xs text-txt3 mt-0.5 truncate">{u.email}</div>
+                    {u.phone && <div className="text-xs text-txt3 mt-0.5">{u.phone}</div>}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openEdit(u)} className="w-8 h-8 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-accent" title="Upravit">
+                      <Edit2 size={13} />
+                    </button>
+                    <button onClick={() => deleteUser(u.id)} className="w-8 h-8 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-red" title="Deaktivovat">
+                      <Ban size={13} />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           ))}
@@ -193,24 +222,47 @@ export default function SettingsPage() {
           <h2 className="text-sm font-bold mb-3 text-txt3">Neaktivni uzivatele</h2>
           <div className="glass rounded-2xl border border-border overflow-hidden opacity-60">
             {inactiveUsers.map((u) => (
-              <div key={u.id} className="grid grid-cols-[2fr_2fr_1fr_1fr_100px] gap-3 px-5 py-3 text-sm border-b border-border/50 hover:bg-surface2/50 transition-colors group">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-surface3 flex items-center justify-center text-xs font-bold text-txt3 shrink-0">
-                    {u.name.charAt(0)}
+              <div key={u.id} className="border-b border-border/50 hover:bg-surface2/50 transition-colors group">
+                {/* Desktop row */}
+                <div className="hidden md:grid grid-cols-[2fr_2fr_1fr_1fr_100px] gap-3 px-5 py-3 text-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-surface3 flex items-center justify-center text-xs font-bold text-txt3 shrink-0">
+                      {u.name.charAt(0)}
+                    </div>
+                    <span className="text-txt3 truncate">{u.name}</span>
                   </div>
-                  <span className="text-txt3 truncate">{u.name}</span>
+                  <div className="flex items-center text-txt3 text-xs truncate">{u.email}</div>
+                  <div className="flex items-center">
+                    <span className="text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg bg-surface3 text-txt3">
+                      {ROLE_LABELS[u.role] || u.role}
+                    </span>
+                  </div>
+                  <div className="flex items-center text-xs text-txt3">{u.phone || "—"}</div>
+                  <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => toggleActive(u.id, u.active)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-green" title="Aktivovat">
+                      <Check size={12} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center text-txt3 text-xs truncate">{u.email}</div>
-                <div className="flex items-center">
-                  <span className="text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg bg-surface3 text-txt3">
-                    {ROLE_LABELS[u.role] || u.role}
-                  </span>
-                </div>
-                <div className="flex items-center text-xs text-txt3">{u.phone || "—"}</div>
-                <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => toggleActive(u.id, u.active)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-green" title="Aktivovat">
-                    <Check size={12} />
-                  </button>
+                {/* Mobile card */}
+                <div className="md:hidden px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-surface3 flex items-center justify-center text-xs font-bold text-txt3 shrink-0">
+                      {u.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-txt3 text-sm truncate">{u.name}</span>
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-lg bg-surface3 text-txt3">
+                          {ROLE_LABELS[u.role] || u.role}
+                        </span>
+                      </div>
+                      <div className="text-xs text-txt3 mt-0.5 truncate">{u.email}</div>
+                    </div>
+                    <button onClick={() => toggleActive(u.id, u.active)} className="w-8 h-8 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-green shrink-0" title="Aktivovat">
+                      <Check size={13} />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

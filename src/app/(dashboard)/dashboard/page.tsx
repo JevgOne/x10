@@ -156,14 +156,14 @@ export default function DashboardPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((c) => (
-          <div key={c.label} className={`${c.cls} glass rounded-2xl border p-5 transition-all hover:scale-[1.02]`}>
+          <div key={c.label} className={`${c.cls} glass rounded-2xl border p-3 sm:p-5 transition-all hover:scale-[1.02]`}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-[11px] font-semibold text-txt3 uppercase tracking-wider">{c.label}</span>
               <div className={`w-8 h-8 rounded-xl bg-surface2 flex items-center justify-center ${c.iconColor}`}>
                 <c.icon size={15} />
               </div>
             </div>
-            <div className="text-2xl font-bold tracking-tight">{c.value}</div>
+            <div className="text-lg sm:text-2xl font-bold tracking-tight">{c.value}</div>
           </div>
         ))}
       </div>

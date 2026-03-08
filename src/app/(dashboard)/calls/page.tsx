@@ -120,7 +120,7 @@ export default function CallsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Hovory</h1>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -133,7 +133,7 @@ export default function CallsPage() {
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-txt3 pointer-events-none" />
           </div>
           <button onClick={openNew} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus size={16} /> Novy hovor
+            <Plus size={16} /> <span className="hidden sm:inline">Novy hovor</span><span className="sm:hidden">Novy</span>
           </button>
         </div>
       </div>
@@ -198,7 +198,7 @@ export default function CallsPage() {
 
       {/* Call list */}
       <div className="glass rounded-2xl border border-border overflow-hidden">
-        <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr_2fr] gap-2 px-4 py-3 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border">
+        <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr_2fr] gap-2 px-4 py-3 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border">
           <span>Kontakt</span>
           <span>Datum & cas</span>
           <span>Trvani</span>
@@ -211,39 +211,77 @@ export default function CallsPage() {
           <div className="p-8 text-center text-txt3 text-sm">Zadne hovory</div>
         ) : (
           filtered.map((call) => (
-            <div key={call.id} className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr_2fr] gap-2 px-4 py-3 text-sm border-b border-border/50 hover:bg-surface2/50 transition-colors">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center shrink-0">
-                  <Phone size={11} className="text-accent" />
+            <div key={call.id} className="border-b border-border/50 hover:bg-surface2/50 transition-colors">
+              {/* Desktop table row */}
+              <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr_2fr] gap-2 px-4 py-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center shrink-0">
+                    <Phone size={11} className="text-accent" />
+                  </div>
+                  <span className="font-medium truncate">
+                    {call.contactFirstName || call.contactLastName
+                      ? `${call.contactFirstName || ""} ${call.contactLastName || ""}`.trim()
+                      : "—"}
+                  </span>
                 </div>
-                <span className="font-medium truncate">
-                  {call.contactFirstName || call.contactLastName
-                    ? `${call.contactFirstName || ""} ${call.contactLastName || ""}`.trim()
-                    : "—"}
-                </span>
+                <div className="flex items-center gap-2 text-xs text-txt2">
+                  <Calendar size={12} />
+                  {call.date && new Date(call.date).toLocaleDateString("cs-CZ")}
+                  {call.time && <span>{call.time}</span>}
+                </div>
+                <div className="flex items-center gap-1 text-xs text-txt2 font-mono">
+                  <Clock size={12} />
+                  {formatDuration(call.duration)}
+                </div>
+                <div className="flex items-center">
+                  {call.type === "outbound" ? (
+                    <span className="flex items-center gap-1 text-xs text-accent"><PhoneOutgoing size={12} /> Out</span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-green"><PhoneIncoming size={12} /> In</span>
+                  )}
+                </div>
+                <div className="flex items-center">
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${RESULT_COLORS[call.result] || "bg-surface3 text-txt3"}`}>
+                    {RESULT_LABELS[call.result] || call.result}
+                  </span>
+                </div>
+                <div className="flex items-center text-xs text-txt2 truncate">{call.note || "—"}</div>
               </div>
-              <div className="flex items-center gap-2 text-xs text-txt2">
-                <Calendar size={12} />
-                {call.date && new Date(call.date).toLocaleDateString("cs-CZ")}
-                {call.time && <span>{call.time}</span>}
-              </div>
-              <div className="flex items-center gap-1 text-xs text-txt2 font-mono">
-                <Clock size={12} />
-                {formatDuration(call.duration)}
-              </div>
-              <div className="flex items-center">
-                {call.type === "outbound" ? (
-                  <span className="flex items-center gap-1 text-xs text-accent"><PhoneOutgoing size={12} /> Out</span>
-                ) : (
-                  <span className="flex items-center gap-1 text-xs text-green"><PhoneIncoming size={12} /> In</span>
+              {/* Mobile card */}
+              <div className="md:hidden px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center shrink-0">
+                    <Phone size={13} className="text-accent" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm truncate">
+                        {call.contactFirstName || call.contactLastName
+                          ? `${call.contactFirstName || ""} ${call.contactLastName || ""}`.trim()
+                          : "—"}
+                      </span>
+                      {call.type === "outbound" ? (
+                        <PhoneOutgoing size={12} className="text-accent shrink-0" />
+                      ) : (
+                        <PhoneIncoming size={12} className="text-green shrink-0" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-txt3">
+                      {call.date && <span>{new Date(call.date).toLocaleDateString("cs-CZ")}</span>}
+                      {call.time && <span>{call.time}</span>}
+                      <span className="font-mono">{formatDuration(call.duration)}</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${RESULT_COLORS[call.result] || "bg-surface3 text-txt3"}`}>
+                      {RESULT_LABELS[call.result] || call.result}
+                    </span>
+                  </div>
+                </div>
+                {call.note && (
+                  <p className="mt-1.5 ml-12 text-xs text-txt3 truncate">{call.note}</p>
                 )}
               </div>
-              <div className="flex items-center">
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${RESULT_COLORS[call.result] || "bg-surface3 text-txt3"}`}>
-                  {RESULT_LABELS[call.result] || call.result}
-                </span>
-              </div>
-              <div className="flex items-center text-xs text-txt2 truncate">{call.note || "—"}</div>
             </div>
           ))
         )}
