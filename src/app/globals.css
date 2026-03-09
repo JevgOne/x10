@@ -47,25 +47,27 @@ body {
   box-shadow: 0 0 20px rgba(0,212,126,0.15);
 }
 
-/* Input styles */
-input, select, textarea {
-  background: rgba(20,20,31,0.8);
-  border: 1px solid var(--color-border);
-  color: var(--color-txt);
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 13px;
-  outline: none;
-  transition: all 0.2s;
-}
+@layer base {
+  /* Input styles */
+  input, select, textarea {
+    background: rgba(20,20,31,0.8);
+    border: 1px solid var(--color-border);
+    color: var(--color-txt);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.2s;
+  }
 
-input:focus, select:focus, textarea:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(59,125,255,0.1);
-}
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(59,125,255,0.1);
+  }
 
-input::placeholder, textarea::placeholder {
-  color: var(--color-txt3);
+  input::placeholder, textarea::placeholder {
+    color: var(--color-txt3);
+  }
 }
 
 /* Button base */
