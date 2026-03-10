@@ -55,8 +55,13 @@ export async function PUT(
   const { id } = await params;
   const body = await req.json();
 
+  const allowed = ["contactId","agentId","projectId","product","amount","type","signDate","note","commissionAgent","commissionSupervisor","commissionCompany"] as const;
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) { if (key in body) updates[key] = body[key]; }
+  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Žádná platná pole" }, { status: 400 });
+
   try {
-    await db.update(schema.deals).set(body).where(eq(schema.deals.id, id));
+    await db.update(schema.deals).set(updates).where(eq(schema.deals.id, id));
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Update deal error:", e);

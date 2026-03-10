@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId } from "@/lib/utils";
 
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     .from(schema.callbacks)
     .leftJoin(schema.contacts, eq(schema.callbacks.contactId, schema.contacts.id))
     .leftJoin(schema.users, eq(schema.callbacks.agentId, schema.users.id))
-    .where(conditions.length === 1 ? conditions[0] : undefined)
+    .where(conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : and(...conditions)) : undefined)
     .orderBy(desc(schema.callbacks.date));
 
   return NextResponse.json({ callbacks });

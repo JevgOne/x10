@@ -49,8 +49,13 @@ export async function PUT(
   const { id } = await params;
   const body = await req.json();
 
+  const allowed = ["name","source","projectId","agentId","uploadedBy","uploadDate","active","contactCount"] as const;
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) { if (key in body) updates[key] = body[key]; }
+  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Žádná platná pole" }, { status: 400 });
+
   try {
-    await db.update(schema.databases).set(body).where(eq(schema.databases.id, id));
+    await db.update(schema.databases).set(updates).where(eq(schema.databases.id, id));
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Update database error:", e);

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 export interface AuthUser {
   id: string;
@@ -41,7 +41,14 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get("auth_token")?.value;
   if (!token) return null;
-  return verifyToken(token);
+  const payload = verifyToken(token);
+  if (!payload) return null;
+
+  // Check if user is still active in DB
+  const dbUser = await getUserById(payload.id);
+  if (!dbUser || !dbUser.active) return null;
+
+  return payload;
 }
 
 export async function getUserById(id: string) {

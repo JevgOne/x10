@@ -23,8 +23,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const body = await req.json();
 
+  const allowed = ["firstName","lastName","phone","phoneAlt","email","dob","gender","address","city","zip","country","projectId","agentId","databaseId","pipelineStage","hotCold","potentialValue","occupation","competitiveIntel","note","lastContactDate"] as const;
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) { if (key in body) updates[key] = body[key]; }
+  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Žádná platná pole" }, { status: 400 });
+
   try {
-    await db.update(schema.contacts).set(body).where(eq(schema.contacts.id, id));
+    await db.update(schema.contacts).set(updates).where(eq(schema.contacts.id, id));
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Update contact error:", e);
