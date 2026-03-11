@@ -40,6 +40,12 @@ export async function GET(
     .limit(1);
 
   if (!result[0]) return NextResponse.json({ error: "Hovor nenalezen" }, { status: 404 });
+
+  // Agents can only view their own calls
+  if (user.role === "agent" && result[0].agentId !== user.id) {
+    return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
+  }
+
   return NextResponse.json({ call: result[0] });
 }
 
@@ -51,19 +57,32 @@ export async function PUT(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  // Verify ownership for agents
+  if (user.role === "agent") {
+    const existing = await db.select({ agentId: schema.calls.agentId }).from(schema.calls).where(eq(schema.calls.id, id)).limit(1);
+    if (!existing[0] || existing[0].agentId !== user.id) {
+      return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
+    }
+  }
+
   const body = await req.json();
 
-  const allowed = ["contactId","agentId","projectId","date","time","duration","type","result","note"] as const;
+  // Agents cannot reassign calls
+  const allowed = user.role === "agent"
+    ? ["contactId","projectId","date","time","duration","type","result","note"] as const
+    : ["contactId","agentId","projectId","date","time","duration","type","result","note"] as const;
+
   const updates: Record<string, unknown> = {};
   for (const key of allowed) { if (key in body) updates[key] = body[key]; }
-  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Žádná platná pole" }, { status: 400 });
+  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Zadna platna pole" }, { status: 400 });
 
   try {
     await db.update(schema.calls).set(updates).where(eq(schema.calls.id, id));
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Update call error:", e);
-    return NextResponse.json({ error: "Chyba při aktualizaci hovoru" }, { status: 500 });
+    return NextResponse.json({ error: "Chyba pri aktualizaci hovoru" }, { status: 500 });
   }
 }
 
@@ -72,10 +91,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getAuthUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  if (user.role === "agent") {
-    return NextResponse.json({ error: "Nedostatečná oprávnění" }, { status: 403 });
+  if (!user || user.role === "agent") {
+    return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
   }
 
   const { id } = await params;

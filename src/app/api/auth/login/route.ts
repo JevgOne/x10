@@ -1,17 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
-import { verifyPassword, createToken } from "@/lib/auth";
+import { verifyPassword, createToken, checkRateLimit, recordLoginAttempt } from "@/lib/auth";
+import { isValidEmail } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+function getClientIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || req.headers.get("x-real-ip")
+    || "unknown";
+}
+
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+
+  // Rate limiting
+  const rateCheck = checkRateLimit(ip);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: `Prilis mnoho pokusu. Zkuste to za ${rateCheck.retryAfterSec} sekund.` },
+      { status: 429 }
+    );
+  }
+
   try {
-    const { email, password } = await req.json();
+    const body = await req.json();
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
 
     if (!email || !password) {
-      return NextResponse.json({ error: "Email a heslo jsou povinné" }, { status: 400 });
+      return NextResponse.json({ error: "Email a heslo jsou povinne" }, { status: 400 });
     }
+
+    if (!isValidEmail(email)) {
+      return NextResponse.json({ error: "Neplatny format emailu" }, { status: 400 });
+    }
+
+    // Generic error message to prevent user enumeration
+    const INVALID_CREDS = "Nespravny email nebo heslo";
 
     const user = await db
       .select()
@@ -20,17 +47,23 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (!user[0]) {
-      return NextResponse.json({ error: "Nesprávný email nebo heslo" }, { status: 401 });
+      recordLoginAttempt(ip, false);
+      return NextResponse.json({ error: INVALID_CREDS }, { status: 401 });
     }
 
     const valid = await verifyPassword(password, user[0].password);
     if (!valid) {
-      return NextResponse.json({ error: "Nesprávný email nebo heslo" }, { status: 401 });
+      recordLoginAttempt(ip, false);
+      return NextResponse.json({ error: INVALID_CREDS }, { status: 401 });
     }
 
     if (!user[0].active) {
-      return NextResponse.json({ error: "Účet je deaktivován" }, { status: 403 });
+      recordLoginAttempt(ip, false);
+      return NextResponse.json({ error: "Ucet je deaktivovan" }, { status: 403 });
     }
+
+    // Success - clear rate limit
+    recordLoginAttempt(ip, true);
 
     const token = createToken({
       id: user[0].id,
@@ -45,9 +78,9 @@ export async function POST(req: NextRequest) {
 
     response.cookies.set("auth_token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
+      secure: true,
+      sameSite: "strict",
+      maxAge: 24 * 60 * 60, // 24 hours (matching JWT expiration)
       path: "/",
     });
 

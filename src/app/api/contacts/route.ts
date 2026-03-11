@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, like, or, desc, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
-import { generateId } from "@/lib/utils";
+import { generateId, escapeLike, sanitizeString } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +11,15 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = req.nextUrl;
-  const search = url.searchParams.get("search") || "";
+  const rawSearch = sanitizeString(url.searchParams.get("search") || "", 100);
+  const search = escapeLike(rawSearch);
   const projectId = url.searchParams.get("projectId");
+  const databaseId = url.searchParams.get("databaseId");
   const stage = url.searchParams.get("stage");
-  const limit = parseInt(url.searchParams.get("limit") || "100");
-  const offset = parseInt(url.searchParams.get("offset") || "0");
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "100") || 100, 500);
+  const offset = Math.max(parseInt(url.searchParams.get("offset") || "0") || 0, 0);
 
-  let query = db.select().from(schema.contacts);
+  const query = db.select().from(schema.contacts);
 
   const conditions = [];
   if (search) {
@@ -31,8 +33,10 @@ export async function GET(req: NextRequest) {
     );
   }
   if (projectId) conditions.push(eq(schema.contacts.projectId, projectId));
+  if (databaseId) conditions.push(eq(schema.contacts.databaseId, databaseId));
   if (stage) conditions.push(eq(schema.contacts.pipelineStage, stage));
 
+  // Agents can only see their own contacts
   if (user.role === "agent") {
     conditions.push(eq(schema.contacts.agentId, user.id));
   }
@@ -56,31 +60,31 @@ export async function POST(req: NextRequest) {
 
     await db.insert(schema.contacts).values({
       id,
-      firstName: body.firstName,
-      lastName: body.lastName || "",
-      phone: body.phone || "",
-      phoneAlt: body.phoneAlt || "",
-      email: body.email || "",
-      dob: body.dob || "",
-      gender: body.gender || "",
-      address: body.address || "",
-      city: body.city || "",
-      zip: body.zip || "",
-      country: body.country || "CZ",
+      firstName: sanitizeString(body.firstName, 100),
+      lastName: sanitizeString(body.lastName, 100),
+      phone: sanitizeString(body.phone, 30),
+      phoneAlt: sanitizeString(body.phoneAlt, 30),
+      email: sanitizeString(body.email, 254),
+      dob: sanitizeString(body.dob, 10),
+      gender: sanitizeString(body.gender, 10),
+      address: sanitizeString(body.address, 200),
+      city: sanitizeString(body.city, 100),
+      zip: sanitizeString(body.zip, 10),
+      country: sanitizeString(body.country || "CZ", 5),
       projectId: body.projectId || null,
-      agentId: body.agentId || user.id,
+      agentId: user.role === "agent" ? user.id : (body.agentId || user.id),
       databaseId: body.databaseId || null,
       pipelineStage: body.pipelineStage || "novy",
       hotCold: body.hotCold || "warm",
-      potentialValue: body.potentialValue || 0,
-      occupation: body.occupation || "",
-      competitiveIntel: body.competitiveIntel || "",
-      note: body.note || "",
+      potentialValue: Math.max(0, Number(body.potentialValue) || 0),
+      occupation: sanitizeString(body.occupation, 100),
+      competitiveIntel: sanitizeString(body.competitiveIntel, 500),
+      note: sanitizeString(body.note, 2000),
     });
 
     return NextResponse.json({ id }, { status: 201 });
   } catch (e) {
     console.error("Create contact error:", e);
-    return NextResponse.json({ error: "Chyba při vytváření kontaktu" }, { status: 500 });
+    return NextResponse.json({ error: "Chyba pri vytvareni kontaktu" }, { status: 500 });
   }
 }

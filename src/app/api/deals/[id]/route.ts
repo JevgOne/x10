@@ -42,6 +42,12 @@ export async function GET(
     .limit(1);
 
   if (!result[0]) return NextResponse.json({ error: "Deal nenalezen" }, { status: 404 });
+
+  // Agents can only view their own deals
+  if (user.role === "agent" && result[0].agentId !== user.id) {
+    return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
+  }
+
   return NextResponse.json({ deal: result[0] });
 }
 
@@ -53,19 +59,32 @@ export async function PUT(
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  // Verify ownership for agents
+  if (user.role === "agent") {
+    const existing = await db.select({ agentId: schema.deals.agentId }).from(schema.deals).where(eq(schema.deals.id, id)).limit(1);
+    if (!existing[0] || existing[0].agentId !== user.id) {
+      return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
+    }
+  }
+
   const body = await req.json();
 
-  const allowed = ["contactId","agentId","projectId","product","amount","type","signDate","note","commissionAgent","commissionSupervisor","commissionCompany"] as const;
+  // Agents cannot reassign deals
+  const allowed = user.role === "agent"
+    ? ["contactId","projectId","product","amount","type","signDate","note","commissionAgent","commissionSupervisor","commissionCompany"] as const
+    : ["contactId","agentId","projectId","product","amount","type","signDate","note","commissionAgent","commissionSupervisor","commissionCompany"] as const;
+
   const updates: Record<string, unknown> = {};
   for (const key of allowed) { if (key in body) updates[key] = body[key]; }
-  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Žádná platná pole" }, { status: 400 });
+  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Zadna platna pole" }, { status: 400 });
 
   try {
     await db.update(schema.deals).set(updates).where(eq(schema.deals.id, id));
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Update deal error:", e);
-    return NextResponse.json({ error: "Chyba při aktualizaci dealu" }, { status: 500 });
+    return NextResponse.json({ error: "Chyba pri aktualizaci dealu" }, { status: 500 });
   }
 }
 
@@ -75,7 +94,7 @@ export async function DELETE(
 ) {
   const user = await getAuthUser();
   if (!user || user.role === "agent") {
-    return NextResponse.json({ error: "Nedostatečná oprávnění" }, { status: 403 });
+    return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
   }
 
   const { id } = await params;

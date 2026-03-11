@@ -35,7 +35,7 @@ export async function GET(
     .where(eq(schema.databases.id, id))
     .limit(1);
 
-  if (!result[0]) return NextResponse.json({ error: "Databáze nenalezena" }, { status: 404 });
+  if (!result[0]) return NextResponse.json({ error: "Databaze nenalezena" }, { status: 404 });
   return NextResponse.json({ database: result[0] });
 }
 
@@ -44,22 +44,25 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getAuthUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user || user.role === "agent") {
+    return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
+  }
 
   const { id } = await params;
   const body = await req.json();
 
-  const allowed = ["name","source","projectId","agentId","uploadedBy","uploadDate","active","contactCount"] as const;
+  // Only safe fields - uploadedBy, contactCount, uploadDate are system-managed
+  const allowed = ["name","source","projectId","agentId","active"] as const;
   const updates: Record<string, unknown> = {};
   for (const key of allowed) { if (key in body) updates[key] = body[key]; }
-  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Žádná platná pole" }, { status: 400 });
+  if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Zadna platna pole" }, { status: 400 });
 
   try {
     await db.update(schema.databases).set(updates).where(eq(schema.databases.id, id));
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Update database error:", e);
-    return NextResponse.json({ error: "Chyba při aktualizaci databáze" }, { status: 500 });
+    return NextResponse.json({ error: "Chyba pri aktualizaci databaze" }, { status: 500 });
   }
 }
 
@@ -69,7 +72,7 @@ export async function DELETE(
 ) {
   const user = await getAuthUser();
   if (!user || user.role === "agent") {
-    return NextResponse.json({ error: "Nedostatečná oprávnění" }, { status: 403 });
+    return NextResponse.json({ error: "Nedostatecna opravneni" }, { status: 403 });
   }
 
   const { id } = await params;

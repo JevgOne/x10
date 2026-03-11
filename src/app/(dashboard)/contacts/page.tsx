@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Plus, Phone, Mail, MapPin, ChevronRight, X, ChevronDown, User, Flame, Snowflake } from "lucide-react";
+import { Search, Plus, Phone, Mail, MapPin, ChevronRight, X, ChevronDown, User, Flame, Snowflake, Database } from "lucide-react";
 
 interface Contact {
   id: string;
@@ -26,6 +26,13 @@ interface Contact {
 interface Project {
   id: string;
   name: string;
+}
+
+interface DatabaseRecord {
+  id: string;
+  name: string;
+  uploadDate: string;
+  contactCount: number;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -54,9 +61,11 @@ const EMPTY_CONTACT = {
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [databases, setDatabases] = useState<DatabaseRecord[]>([]);
   const [search, setSearch] = useState("");
   const [filterProject, setFilterProject] = useState("");
   const [filterStage, setFilterStage] = useState("");
+  const [filterDatabase, setFilterDatabase] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Contact | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -75,21 +84,27 @@ export default function ContactsPage() {
       if (search) params.set("search", search);
       if (filterProject) params.set("projectId", filterProject);
       if (filterStage) params.set("stage", filterStage);
-      const [cRes, pRes] = await Promise.all([
+      if (filterDatabase) params.set("databaseId", filterDatabase);
+      const [cRes, pRes, dbRes] = await Promise.all([
         fetch(`/api/contacts?${params}`),
         fetch("/api/projects"),
+        fetch("/api/databases"),
       ]);
       if (!cRes.ok || !pRes.ok) throw new Error("Chyba načítání dat");
       const cData = await cRes.json();
       const pData = await pRes.json();
       setContacts(cData.contacts || []);
       setProjects(pData.projects || []);
+      if (dbRes.ok) {
+        const dbData = await dbRes.json();
+        setDatabases(dbData.databases || []);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba načítání");
     } finally {
       setLoading(false);
     }
-  }, [search, filterProject, filterStage]);
+  }, [search, filterProject, filterStage, filterDatabase]);
 
   useEffect(() => {
     const t = setTimeout(loadContacts, 300);
@@ -183,6 +198,17 @@ export default function ContactsPage() {
             <select value={filterStage} onChange={(e) => setFilterStage(e.target.value)} className="text-sm pr-8 appearance-none">
               <option value="">Vsechny faze</option>
               {Object.entries(STAGE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-txt3 pointer-events-none" />
+          </div>
+          <div className="relative">
+            <select value={filterDatabase} onChange={(e) => setFilterDatabase(e.target.value)} className="text-sm pr-8 appearance-none">
+              <option value="">Vsechny databaze</option>
+              {databases.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.contactCount})
+                </option>
+              ))}
             </select>
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-txt3 pointer-events-none" />
           </div>
