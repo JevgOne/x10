@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (e) {
     console.error("Login error:", e);
-    return NextResponse.json({ error: "Chyba serveru" }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: "Chyba serveru", debug: msg }, { status: 500 });
   }
 }
