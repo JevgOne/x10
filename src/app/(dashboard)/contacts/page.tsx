@@ -62,21 +62,33 @@ export default function ContactsPage() {
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState(EMPTY_CONTACT);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [user, setUser] = useState<{ role: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => setUser(d.user || null)).catch(() => {});
+  }, []);
 
   const loadContacts = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (filterProject) params.set("projectId", filterProject);
-    if (filterStage) params.set("stage", filterStage);
-    const [cRes, pRes] = await Promise.all([
-      fetch(`/api/contacts?${params}`),
-      fetch("/api/projects"),
-    ]);
-    const cData = await cRes.json();
-    const pData = await pRes.json();
-    setContacts(cData.contacts || []);
-    setProjects(pData.projects || []);
-    setLoading(false);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (filterProject) params.set("projectId", filterProject);
+      if (filterStage) params.set("stage", filterStage);
+      const [cRes, pRes] = await Promise.all([
+        fetch(`/api/contacts?${params}`),
+        fetch("/api/projects"),
+      ]);
+      if (!cRes.ok || !pRes.ok) throw new Error("Chyba načítání dat");
+      const cData = await cRes.json();
+      const pData = await pRes.json();
+      setContacts(cData.contacts || []);
+      setProjects(pData.projects || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba načítání");
+    } finally {
+      setLoading(false);
+    }
   }, [search, filterProject, filterStage]);
 
   useEffect(() => {
@@ -86,32 +98,50 @@ export default function ContactsPage() {
 
   const saveNew = async () => {
     setSaving(true);
-    await fetch("/api/contacts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    setShowNew(false);
-    setForm(EMPTY_CONTACT);
-    loadContacts();
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba ukládání"); }
+      setShowNew(false);
+      setForm(EMPTY_CONTACT);
+      loadContacts();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba ukládání");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updateStage = async (id: string, newStage: string) => {
-    setContacts((prev) => prev.map((c) => c.id === id ? { ...c, pipelineStage: newStage } : c));
+    const prev = contacts;
+    setContacts((p) => p.map((c) => c.id === id ? { ...c, pipelineStage: newStage } : c));
     if (selected?.id === id) setSelected({ ...selected, pipelineStage: newStage });
-    await fetch(`/api/contacts/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pipelineStage: newStage }),
-    });
+    try {
+      const res = await fetch(`/api/contacts/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineStage: newStage }),
+      });
+      if (!res.ok) throw new Error("Chyba aktualizace");
+    } catch {
+      setContacts(prev);
+      setError("Nepodařilo se změnit fázi");
+    }
   };
 
   const deleteContact = async (id: string) => {
     if (!confirm("Opravdu smazat tento kontakt?")) return;
-    await fetch(`/api/contacts/${id}`, { method: "DELETE" });
-    if (selected?.id === id) setSelected(null);
-    loadContacts();
+    try {
+      const res = await fetch(`/api/contacts/${id}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba mazání"); }
+      if (selected?.id === id) setSelected(null);
+      loadContacts();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba mazání");
+    }
   };
 
   const totalValue = contacts.reduce((s, c) => s + (c.potentialValue || 0), 0);
@@ -128,6 +158,13 @@ export default function ContactsPage() {
             <Plus size={16} /> Novy kontakt
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 text-red text-sm bg-red/10 rounded-xl px-4 py-2.5 border border-red/20 flex justify-between items-center">
+            {error}
+            <button onClick={() => setError("")} className="text-red hover:text-red/70"><X size={14} /></button>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 mb-4">
@@ -315,11 +352,13 @@ export default function ContactsPage() {
                 </div>
               )}
 
-              <div className="pt-3 border-t border-border">
-                <button onClick={() => deleteContact(selected.id)} className="text-xs text-red hover:text-red/80 transition-colors">
-                  Smazat kontakt
-                </button>
-              </div>
+              {user?.role !== "agent" && (
+                <div className="pt-3 border-t border-border">
+                  <button onClick={() => deleteContact(selected.id)} className="text-xs text-red hover:text-red/80 transition-colors">
+                    Smazat kontakt
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

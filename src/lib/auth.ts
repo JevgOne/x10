@@ -44,11 +44,16 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   const payload = verifyToken(token);
   if (!payload) return null;
 
-  // Check if user is still active in DB
+  // Return fresh data from DB (not stale JWT payload)
   const dbUser = await getUserById(payload.id);
   if (!dbUser || !dbUser.active) return null;
 
-  return payload;
+  return {
+    id: dbUser.id,
+    name: dbUser.name,
+    email: dbUser.email,
+    role: dbUser.role as AuthUser["role"],
+  };
 }
 
 export async function getUserById(id: string) {

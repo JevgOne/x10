@@ -53,44 +53,62 @@ export default function DocumentsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_DOC);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [dRes, cRes] = await Promise.all([
-      fetch("/api/documents"),
-      fetch("/api/contacts"),
-    ]);
-    const dData = await dRes.json();
-    const cData = await cRes.json();
-    setDocuments(dData.documents || []);
-    setContacts(cData.contacts || []);
-    setLoading(false);
+    try {
+      const [dRes, cRes] = await Promise.all([
+        fetch("/api/documents"),
+        fetch("/api/contacts"),
+      ]);
+      if (!dRes.ok || !cRes.ok) throw new Error("Chyba načítání");
+      const dData = await dRes.json();
+      const cData = await cRes.json();
+      setDocuments(dData.documents || []);
+      setContacts(cData.contacts || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba načítání");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const save = async () => {
     setSaving(true);
-    await fetch("/api/documents", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.name,
-        category: form.category,
-        contactId: form.contactId || null,
-        note: form.note,
-        uploadDate: new Date().toISOString().split("T")[0],
-      }),
-    });
-    setSaving(false);
-    setShowModal(false);
-    setForm(EMPTY_DOC);
-    load();
+    try {
+      const res = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          category: form.category,
+          contactId: form.contactId || null,
+          note: form.note,
+          uploadDate: new Date().toISOString().split("T")[0],
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba ukládání"); }
+      setShowModal(false);
+      setForm(EMPTY_DOC);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba ukládání");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const deleteDoc = async (id: string) => {
     if (!confirm("Opravdu smazat tento dokument?")) return;
-    await fetch(`/api/documents/${id}`, { method: "DELETE" });
-    load();
+    try {
+      const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba mazání"); }
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba mazání");
+    }
   };
 
   let filtered = documents;
@@ -120,6 +138,12 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="text-red text-sm bg-red/10 rounded-xl px-4 py-2.5 border border-red/20 flex justify-between items-center">
+          {error}
+          <button onClick={() => setError("")} className="text-red hover:text-red/70"><X size={14} /></button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Dokumenty</h1>

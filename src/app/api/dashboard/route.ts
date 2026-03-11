@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, count, sum, sql, desc } from "drizzle-orm";
+import { eq, count, sum, sql, desc, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -9,11 +9,19 @@ export async function GET() {
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [contactCount] = await db.select({ count: count() }).from(schema.contacts);
-  const [dealCount] = await db.select({ count: count() }).from(schema.deals);
-  const [dealSum] = await db.select({ total: sum(schema.deals.amount) }).from(schema.deals);
-  const [callCount] = await db.select({ count: count() }).from(schema.calls);
-  const [callbackCount] = await db.select({ count: count() }).from(schema.callbacks).where(eq(schema.callbacks.completed, false));
+  const isAgent = user.role === "agent";
+  const agentContactFilter = isAgent ? eq(schema.contacts.agentId, user.id) : undefined;
+  const agentDealFilter = isAgent ? eq(schema.deals.agentId, user.id) : undefined;
+  const agentCallFilter = isAgent ? eq(schema.calls.agentId, user.id) : undefined;
+  const agentCallbackFilter = isAgent
+    ? and(eq(schema.callbacks.agentId, user.id), eq(schema.callbacks.completed, false))
+    : eq(schema.callbacks.completed, false);
+
+  const [contactCount] = await db.select({ count: count() }).from(schema.contacts).where(agentContactFilter);
+  const [dealCount] = await db.select({ count: count() }).from(schema.deals).where(agentDealFilter);
+  const [dealSum] = await db.select({ total: sum(schema.deals.amount) }).from(schema.deals).where(agentDealFilter);
+  const [callCount] = await db.select({ count: count() }).from(schema.calls).where(agentCallFilter);
+  const [callbackCount] = await db.select({ count: count() }).from(schema.callbacks).where(agentCallbackFilter);
   const [dbCount] = await db.select({ count: count() }).from(schema.databases);
   const [docCount] = await db.select({ count: count() }).from(schema.documents);
   const [projectCount] = await db.select({ count: count() }).from(schema.projects);
@@ -24,6 +32,7 @@ export async function GET() {
       count: count(),
     })
     .from(schema.contacts)
+    .where(agentContactFilter)
     .groupBy(schema.contacts.pipelineStage);
 
   // Recent contacts with joined data
@@ -41,6 +50,7 @@ export async function GET() {
     })
     .from(schema.contacts)
     .leftJoin(schema.projects, eq(schema.contacts.projectId, schema.projects.id))
+    .where(agentContactFilter)
     .orderBy(desc(schema.contacts.createdAt))
     .limit(5);
 
@@ -61,6 +71,7 @@ export async function GET() {
     .leftJoin(schema.contacts, eq(schema.deals.contactId, schema.contacts.id))
     .leftJoin(schema.projects, eq(schema.deals.projectId, schema.projects.id))
     .leftJoin(schema.users, eq(schema.deals.agentId, schema.users.id))
+    .where(agentDealFilter)
     .orderBy(desc(schema.deals.createdAt))
     .limit(5);
 
@@ -78,6 +89,7 @@ export async function GET() {
     })
     .from(schema.calls)
     .leftJoin(schema.contacts, eq(schema.calls.contactId, schema.contacts.id))
+    .where(agentCallFilter)
     .orderBy(desc(schema.calls.createdAt))
     .limit(5);
 
@@ -88,6 +100,7 @@ export async function GET() {
       count: count(),
     })
     .from(schema.calls)
+    .where(agentCallFilter)
     .groupBy(schema.calls.result);
 
   // Hot/cold distribution
@@ -97,6 +110,7 @@ export async function GET() {
       count: count(),
     })
     .from(schema.contacts)
+    .where(agentContactFilter)
     .groupBy(schema.contacts.hotCold);
 
   // Top agents by deal count

@@ -48,12 +48,24 @@ export default function ProjectsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_PROJECT);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [user, setUser] = useState<{ role: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => setUser(d.user || null)).catch(() => {});
+  }, []);
 
   const load = async () => {
-    const res = await fetch("/api/projects");
-    const data = await res.json();
-    setProjects(data.projects || []);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/projects");
+      if (!res.ok) throw new Error("Chyba načítání projektů");
+      const data = await res.json();
+      setProjects(data.projects || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba načítání");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -79,22 +91,33 @@ export default function ProjectsPage() {
 
   const save = async () => {
     setSaving(true);
-    const method = editId ? "PUT" : "POST";
-    const url = editId ? `/api/projects/${editId}` : "/api/projects";
-    await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    setShowModal(false);
-    load();
+    try {
+      const method = editId ? "PUT" : "POST";
+      const url = editId ? `/api/projects/${editId}` : "/api/projects";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba ukládání"); }
+      setShowModal(false);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba ukládání");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const deleteProject = async (id: string) => {
     if (!confirm("Opravdu smazat tento projekt?")) return;
-    await fetch(`/api/projects/${id}`, { method: "DELETE" });
-    load();
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba mazání"); }
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba mazání");
+    }
   };
 
   if (loading) {
@@ -107,11 +130,19 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="text-red text-sm bg-red/10 rounded-xl px-4 py-2.5 border border-red/20 flex justify-between items-center">
+          {error}
+          <button onClick={() => setError("")} className="text-red hover:text-red/70"><X size={14} /></button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Projekty</h1>
-        <button onClick={openNew} className="btn-primary flex items-center gap-2 text-sm">
-          <Plus size={16} /> Novy projekt
-        </button>
+        {user?.role === "admin" && (
+          <button onClick={openNew} className="btn-primary flex items-center gap-2 text-sm">
+            <Plus size={16} /> Novy projekt
+          </button>
+        )}
       </div>
 
       {/* Project grid */}
@@ -131,14 +162,16 @@ export default function ProjectsPage() {
                   {p.product && <p className="text-[11px] text-txt3">{p.product}</p>}
                 </div>
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-accent">
-                  <Edit2 size={12} />
-                </button>
-                <button onClick={() => deleteProject(p.id)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-red">
-                  <Trash2 size={12} />
-                </button>
-              </div>
+              {user?.role === "admin" && (
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => openEdit(p)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-accent">
+                    <Edit2 size={12} />
+                  </button>
+                  <button onClick={() => deleteProject(p.id)} className="w-7 h-7 rounded-lg bg-surface2 flex items-center justify-center text-txt3 hover:text-red">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {p.description && (

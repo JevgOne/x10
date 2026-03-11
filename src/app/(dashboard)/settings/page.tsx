@@ -36,11 +36,19 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [loadError, setLoadError] = useState("");
+
   const load = useCallback(async () => {
-    const res = await fetch("/api/users");
-    const data = await res.json();
-    setUsers(data.users || []);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/users");
+      if (!res.ok) throw new Error("Chyba načítání uživatelů");
+      const data = await res.json();
+      setUsers(data.users || []);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Chyba načítání");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -62,43 +70,55 @@ export default function SettingsPage() {
   const save = async () => {
     setSaving(true);
     setError("");
+    try {
+      const method = editId ? "PUT" : "POST";
+      const url = editId ? `/api/users/${editId}` : "/api/users";
+      const body: Record<string, string> = { name: form.name, email: form.email, role: form.role, phone: form.phone };
+      if (form.password) body.password = form.password;
 
-    const method = editId ? "PUT" : "POST";
-    const url = editId ? `/api/users/${editId}` : "/api/users";
-    const body: Record<string, string> = { name: form.name, email: form.email, role: form.role, phone: form.phone };
-    if (form.password) body.password = form.password;
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    const data = await res.json();
-    setSaving(false);
-
-    if (!res.ok) {
-      setError(data.error || "Chyba");
-      return;
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Chyba");
+        return;
+      }
+      setShowModal(false);
+      load();
+    } catch {
+      setError("Chyba připojení k serveru");
+    } finally {
+      setSaving(false);
     }
-
-    setShowModal(false);
-    load();
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await fetch(`/api/users/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: !active }),
-    });
-    load();
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !active }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba"); }
+      load();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Chyba změny stavu");
+    }
   };
 
   const deleteUser = async (id: string) => {
     if (!confirm("Opravdu deaktivovat tohoto uzivatele?")) return;
-    await fetch(`/api/users/${id}`, { method: "DELETE" });
-    load();
+    try {
+      const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba"); }
+      load();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Chyba deaktivace");
+    }
   };
 
   if (loading) {
@@ -114,6 +134,12 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      {loadError && (
+        <div className="text-red text-sm bg-red/10 rounded-xl px-4 py-2.5 border border-red/20 flex justify-between items-center">
+          {loadError}
+          <button onClick={() => setLoadError("")} className="text-red hover:text-red/70"><X size={14} /></button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Uzivatele & Nastaveni</h1>

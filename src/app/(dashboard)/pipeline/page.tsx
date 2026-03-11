@@ -45,37 +45,52 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
   const [dragItem, setDragItem] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (filterProject) params.set("projectId", filterProject);
-    const [cRes, pRes] = await Promise.all([
-      fetch(`/api/contacts?${params}`),
-      fetch("/api/projects"),
-    ]);
-    const cData = await cRes.json();
-    const pData = await pRes.json();
-    setContacts(cData.contacts || []);
-    setProjects(pData.projects || []);
-    setLoading(false);
+    try {
+      const params = new URLSearchParams();
+      if (filterProject) params.set("projectId", filterProject);
+      const [cRes, pRes] = await Promise.all([
+        fetch(`/api/contacts?${params}`),
+        fetch("/api/projects"),
+      ]);
+      if (!cRes.ok || !pRes.ok) throw new Error("Chyba načítání");
+      const cData = await cRes.json();
+      const pData = await pRes.json();
+      setContacts(cData.contacts || []);
+      setProjects(pData.projects || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba načítání");
+    } finally {
+      setLoading(false);
+    }
   }, [filterProject]);
 
   useEffect(() => { load(); }, [load]);
 
   const moveContact = async (contactId: string, newStage: string) => {
-    setContacts((prev) =>
-      prev.map((c) => (c.id === contactId ? { ...c, pipelineStage: newStage } : c))
+    const prev = [...contacts];
+    setContacts((p) =>
+      p.map((c) => (c.id === contactId ? { ...c, pipelineStage: newStage } : c))
     );
-    await fetch(`/api/contacts/${contactId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pipelineStage: newStage }),
-    });
+    try {
+      const res = await fetch(`/api/contacts/${contactId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipelineStage: newStage }),
+      });
+      if (!res.ok) throw new Error("Chyba přesunu");
+    } catch {
+      setContacts(prev);
+      setError("Nepodařilo se přesunout kontakt");
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDragItem(id);
     e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
   };
 
   const handleDragOver = (e: React.DragEvent, stage: string) => {

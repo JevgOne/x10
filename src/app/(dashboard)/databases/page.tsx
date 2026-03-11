@@ -122,17 +122,24 @@ export default function DatabasesPage() {
   const [importProject, setImportProject] = useState("");
   const [importResult, setImportResult] = useState<{ imported: number; errors: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [dRes, pRes] = await Promise.all([
-      fetch("/api/databases"),
-      fetch("/api/projects"),
-    ]);
-    const dData = await dRes.json();
-    const pData = await pRes.json();
-    setDatabases(dData.databases || []);
-    setProjects(pData.projects || []);
-    setLoading(false);
+    try {
+      const [dRes, pRes] = await Promise.all([
+        fetch("/api/databases"),
+        fetch("/api/projects"),
+      ]);
+      if (!dRes.ok || !pRes.ok) throw new Error("Chyba načítání");
+      const dData = await dRes.json();
+      const pData = await pRes.json();
+      setDatabases(dData.databases || []);
+      setProjects(pData.projects || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba načítání");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -149,41 +156,48 @@ export default function DatabasesPage() {
 
   const doImport = async () => {
     setImportStep("importing");
-    const valid = parsed.filter((c) => c.valid);
+    try {
+      const valid = parsed.filter((c) => c.valid);
 
-    const dbRes = await fetch("/api/databases", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: importName,
-        source: "xlsx",
-        projectId: importProject || null,
-        contactCount: valid.length,
-      }),
-    });
-    const dbData = await dbRes.json();
+      const dbRes = await fetch("/api/databases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: importName,
+          source: "xlsx",
+          projectId: importProject || null,
+          contactCount: valid.length,
+        }),
+      });
+      if (!dbRes.ok) throw new Error("Chyba vytváření databáze");
+      const dbData = await dbRes.json();
 
-    const res = await fetch("/api/contacts/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        databaseId: dbData.id,
-        projectId: importProject || null,
-        contacts: valid.map((c) => ({
-          firstName: c.firstName,
-          lastName: c.lastName,
-          phone: c.phone,
-          email: c.email,
-          city: c.city,
-          address: c.address,
-          potentialValue: c.potentialValue,
-        })),
-      }),
-    });
-    const result = await res.json();
-    setImportResult({ imported: result.imported || 0, errors: result.errors || 0 });
-    setImportStep("done");
-    load();
+      const res = await fetch("/api/contacts/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          databaseId: dbData.id,
+          projectId: importProject || null,
+          contacts: valid.map((c) => ({
+            firstName: c.firstName,
+            lastName: c.lastName,
+            phone: c.phone,
+            email: c.email,
+            city: c.city,
+            address: c.address,
+            potentialValue: c.potentialValue,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error("Chyba importu kontaktů");
+      const result = await res.json();
+      setImportResult({ imported: result.imported || 0, errors: result.errors || 0 });
+      setImportStep("done");
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba importu");
+      setImportStep("upload");
+    }
   };
 
   const closeImport = () => {
@@ -198,8 +212,13 @@ export default function DatabasesPage() {
 
   const deleteDb = async (id: string) => {
     if (!confirm("Opravdu smazat tuto databazi?")) return;
-    await fetch(`/api/databases/${id}`, { method: "DELETE" });
-    load();
+    try {
+      const res = await fetch(`/api/databases/${id}`, { method: "DELETE" });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba mazání"); }
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba mazání");
+    }
   };
 
   const filtered = databases.filter((d) =>
@@ -220,6 +239,12 @@ export default function DatabasesPage() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="text-red text-sm bg-red/10 rounded-xl px-4 py-2.5 border border-red/20 flex justify-between items-center">
+          {error}
+          <button onClick={() => setError("")} className="text-red hover:text-red/70"><X size={14} /></button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Databaze</h1>

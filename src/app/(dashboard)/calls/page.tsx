@@ -65,17 +65,24 @@ export default function CallsPage() {
   const [form, setForm] = useState(EMPTY_CALL);
   const [saving, setSaving] = useState(false);
   const [filterResult, setFilterResult] = useState("");
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [cRes, ctRes] = await Promise.all([
-      fetch("/api/calls"),
-      fetch("/api/contacts"),
-    ]);
-    const cData = await cRes.json();
-    const ctData = await ctRes.json();
-    setCalls(cData.calls || []);
-    setContacts(ctData.contacts || []);
-    setLoading(false);
+    try {
+      const [cRes, ctRes] = await Promise.all([
+        fetch("/api/calls"),
+        fetch("/api/contacts"),
+      ]);
+      if (!cRes.ok || !ctRes.ok) throw new Error("Chyba načítání dat");
+      const cData = await cRes.json();
+      const ctData = await ctRes.json();
+      setCalls(cData.calls || []);
+      setContacts(ctData.contacts || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba načítání");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -92,14 +99,20 @@ export default function CallsPage() {
 
   const save = async () => {
     setSaving(true);
-    await fetch("/api/calls", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    setShowModal(false);
-    load();
+    try {
+      const res = await fetch("/api/calls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba ukládání"); }
+      setShowModal(false);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba ukládání");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const filtered = filterResult
@@ -120,6 +133,13 @@ export default function CallsPage() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="text-red text-sm bg-red/10 rounded-xl px-4 py-2.5 border border-red/20 flex justify-between items-center">
+          {error}
+          <button onClick={() => setError("")} className="text-red hover:text-red/70"><X size={14} /></button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Hovory</h1>
         <div className="flex items-center gap-3">

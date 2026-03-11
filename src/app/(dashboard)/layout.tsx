@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   LayoutDashboard, Users, Briefcase, Phone, FolderOpen,
   Database, Target, LogOut, ChevronLeft, Menu,
-  UserCog, Bell, X,
+  UserCog, X, Handshake, PhoneForwarded,
 } from "lucide-react";
 
 interface User {
@@ -23,6 +23,8 @@ const NAV = [
   { href: "/pipeline", label: "Pipeline", icon: Target },
   { href: "/projects", label: "Projekty", icon: Briefcase },
   { href: "/calls", label: "Hovory", icon: Phone },
+  { href: "/deals", label: "Dealy", icon: Handshake },
+  { href: "/callbacks", label: "Callbacky", icon: PhoneForwarded },
   { href: "/documents", label: "Dokumenty", icon: FolderOpen },
 ];
 
@@ -195,12 +197,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {pathname.replace("/", "").replace(/-/g, " ") || "Dashboard"}
             </h2>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="w-9 h-9 rounded-xl bg-surface2 flex items-center justify-center text-txt3 hover:text-txt transition-colors relative">
-              <Bell size={16} />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red rounded-full" />
-            </button>
-          </div>
+          <div className="flex items-center gap-3" />
         </header>
 
         {/* Content */}
