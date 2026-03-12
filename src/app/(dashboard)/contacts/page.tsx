@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Plus, Phone, Mail, MapPin, ChevronRight, X, ChevronDown, User, Flame, Snowflake, Database } from "lucide-react";
+import { Search, Plus, Phone, Mail, MapPin, ChevronRight, X, ChevronDown, Flame, Snowflake, UserCheck, CheckSquare, Square, Users } from "lucide-react";
 
 interface Contact {
   id: string;
@@ -16,6 +16,7 @@ interface Contact {
   hotCold: string;
   potentialValue: number;
   projectId: string;
+  agentId: string;
   occupation: string;
   note: string;
   dob: string;
@@ -33,6 +34,14 @@ interface DatabaseRecord {
   name: string;
   uploadDate: string;
   contactCount: number;
+}
+
+interface Agent {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -62,21 +71,38 @@ export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [databases, setDatabases] = useState<DatabaseRecord[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [search, setSearch] = useState("");
   const [filterProject, setFilterProject] = useState("");
   const [filterStage, setFilterStage] = useState("");
   const [filterDatabase, setFilterDatabase] = useState("");
+  const [filterAgent, setFilterAgent] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Contact | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState(EMPTY_CONTACT);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [user, setUser] = useState<{ role: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; role: string } | null>(null);
+  // Bulk selection & assignment
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [showAssign, setShowAssign] = useState(false);
+  const [assignAgent, setAssignAgent] = useState("");
+  const [assigning, setAssigning] = useState(false);
+
+  const isAdmin = user?.role === "admin" || user?.role === "supervisor";
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(d => setUser(d.user || null)).catch(() => {});
   }, []);
+
+  // Fetch agents list for admin/supervisor
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch("/api/users").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.users) setAgents(d.users.filter((u: Agent) => u.active));
+    }).catch(() => {});
+  }, [isAdmin]);
 
   const loadContacts = useCallback(async () => {
     try {
@@ -85,12 +111,14 @@ export default function ContactsPage() {
       if (filterProject) params.set("projectId", filterProject);
       if (filterStage) params.set("stage", filterStage);
       if (filterDatabase) params.set("databaseId", filterDatabase);
+      if (filterAgent) params.set("agentId", filterAgent);
+      params.set("limit", "500");
       const [cRes, pRes, dbRes] = await Promise.all([
         fetch(`/api/contacts?${params}`),
         fetch("/api/projects"),
         fetch("/api/databases"),
       ]);
-      if (!cRes.ok || !pRes.ok) throw new Error("Chyba načítání dat");
+      if (!cRes.ok || !pRes.ok) throw new Error("Chyba nacitani dat");
       const cData = await cRes.json();
       const pData = await pRes.json();
       setContacts(cData.contacts || []);
@@ -100,11 +128,11 @@ export default function ContactsPage() {
         setDatabases(dbData.databases || []);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chyba načítání");
+      setError(e instanceof Error ? e.message : "Chyba nacitani");
     } finally {
       setLoading(false);
     }
-  }, [search, filterProject, filterStage, filterDatabase]);
+  }, [search, filterProject, filterStage, filterDatabase, filterAgent]);
 
   useEffect(() => {
     const t = setTimeout(loadContacts, 300);
@@ -119,12 +147,12 @@ export default function ContactsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba ukládání"); }
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba ukladani"); }
       setShowNew(false);
       setForm(EMPTY_CONTACT);
       loadContacts();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chyba ukládání");
+      setError(e instanceof Error ? e.message : "Chyba ukladani");
     } finally {
       setSaving(false);
     }
@@ -143,7 +171,7 @@ export default function ContactsPage() {
       if (!res.ok) throw new Error("Chyba aktualizace");
     } catch {
       setContacts(prev);
-      setError("Nepodařilo se změnit fázi");
+      setError("Nepodarilo se zmenit fazi");
     }
   };
 
@@ -151,13 +179,59 @@ export default function ContactsPage() {
     if (!confirm("Opravdu smazat tento kontakt?")) return;
     try {
       const res = await fetch(`/api/contacts/${id}`, { method: "DELETE" });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba mazání"); }
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba mazani"); }
       if (selected?.id === id) setSelected(null);
       loadContacts();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chyba mazání");
+      setError(e instanceof Error ? e.message : "Chyba mazani");
     }
   };
+
+  // Bulk selection
+  const toggleCheck = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChecked(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (checked.size === contacts.length) {
+      setChecked(new Set());
+    } else {
+      setChecked(new Set(contacts.map(c => c.id)));
+    }
+  };
+
+  // Assign contacts to agent
+  const doAssign = async () => {
+    if (!assignAgent || checked.size === 0) return;
+    setAssigning(true);
+    try {
+      const res = await fetch("/api/contacts/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: Array.from(checked), agentId: assignAgent }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba prideleni"); }
+      const result = await res.json();
+      setShowAssign(false);
+      setChecked(new Set());
+      setAssignAgent("");
+      loadContacts();
+      const agentName = agents.find(a => a.id === assignAgent)?.name || "";
+      setError(""); // clear previous errors
+      alert(`Prideleno ${result.assigned} kontaktu agentovi ${agentName}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba prideleni");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const getAgentName = (agentId: string) => agents.find(a => a.id === agentId)?.name || "";
 
   const totalValue = contacts.reduce((s, c) => s + (c.potentialValue || 0), 0);
 
@@ -169,9 +243,16 @@ export default function ContactsPage() {
             <h1 className="text-xl font-bold">Kontakty</h1>
             <p className="text-xs text-txt3 mt-1">{contacts.length} kontaktu &middot; {formatCZK(totalValue)} celkova hodnota</p>
           </div>
-          <button onClick={() => { setForm(EMPTY_CONTACT); setShowNew(true); }} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus size={16} /> Novy kontakt
-          </button>
+          <div className="flex items-center gap-2">
+            {isAdmin && checked.size > 0 && (
+              <button onClick={() => setShowAssign(true)} className="flex items-center gap-2 text-sm px-4 py-2 rounded-xl bg-purple/10 text-purple border border-purple/20 hover:bg-purple/20 transition-all font-medium">
+                <UserCheck size={16} /> Pridelit ({checked.size})
+              </button>
+            )}
+            <button onClick={() => { setForm(EMPTY_CONTACT); setShowNew(true); }} className="btn-primary flex items-center gap-2 text-sm">
+              <Plus size={16} /> Novy kontakt
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -187,6 +268,15 @@ export default function ContactsPage() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-txt3" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Hledat kontakty..." className="w-full pl-10" />
           </div>
+          {isAdmin && agents.length > 0 && (
+            <div className="relative">
+              <select value={filterAgent} onChange={(e) => setFilterAgent(e.target.value)} className="text-sm pr-8 appearance-none">
+                <option value="">Vsichni agenti</option>
+                {agents.filter(a => a.role === "agent").map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-txt3 pointer-events-none" />
+            </div>
+          )}
           <div className="relative">
             <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} className="text-sm pr-8 appearance-none">
               <option value="">Vsechny projekty</option>
@@ -216,8 +306,15 @@ export default function ContactsPage() {
 
         {/* Table */}
         <div className="glass rounded-2xl border border-border overflow-hidden">
-          <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-2 px-4 py-2.5 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border">
-            <span>Jmeno</span><span>Kontakt</span><span>Mesto</span><span>Faze</span><span className="text-right">Hodnota</span>
+          <div className={`hidden md:grid gap-2 px-4 py-2.5 text-[10px] font-semibold text-txt3 uppercase tracking-wider border-b border-border ${isAdmin ? "grid-cols-[auto_2fr_1.5fr_1fr_1fr_1fr_1fr]" : "grid-cols-[2fr_1.5fr_1fr_1fr_1fr]"}`}>
+            {isAdmin && (
+              <button onClick={toggleAll} className="flex items-center justify-center w-5">
+                {checked.size === contacts.length && contacts.length > 0 ? <CheckSquare size={14} className="text-accent" /> : <Square size={14} />}
+              </button>
+            )}
+            <span>Jmeno</span><span>Kontakt</span>
+            {isAdmin && <span>Agent</span>}
+            <span>Mesto</span><span>Faze</span><span className="text-right">Hodnota</span>
           </div>
           {loading ? (
             <div className="p-8 text-center">
@@ -232,10 +329,15 @@ export default function ContactsPage() {
                 onClick={() => setSelected(c)}
                 className={`cursor-pointer transition-colors hover:bg-surface2/50 border-b border-border/50 ${
                   selected?.id === c.id ? "bg-accent/5 border-l-2 border-l-accent" : ""
-                }`}
+                } ${checked.has(c.id) ? "bg-purple/5" : ""}`}
               >
                 {/* Desktop table row */}
-                <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-2 px-4 py-3 text-sm">
+                <div className={`hidden md:grid gap-2 px-4 py-3 text-sm ${isAdmin ? "grid-cols-[auto_2fr_1.5fr_1fr_1fr_1fr_1fr]" : "grid-cols-[2fr_1.5fr_1fr_1fr_1fr]"}`}>
+                  {isAdmin && (
+                    <button onClick={(e) => toggleCheck(c.id, e)} className="flex items-center justify-center w-5">
+                      {checked.has(c.id) ? <CheckSquare size={16} className="text-accent" /> : <Square size={16} className="text-txt3" />}
+                    </button>
+                  )}
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
                       {c.firstName?.charAt(0)}
@@ -250,6 +352,17 @@ export default function ContactsPage() {
                     {c.phone && <span className="flex items-center gap-1"><Phone size={10} />{c.phone}</span>}
                     {c.email && <span className="flex items-center gap-1 truncate"><Mail size={10} />{c.email}</span>}
                   </div>
+                  {isAdmin && (
+                    <div className="flex items-center">
+                      {c.agentId && getAgentName(c.agentId) ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple/10 text-purple truncate">
+                          {getAgentName(c.agentId)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-txt3 italic">Neprideleno</span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex items-center gap-1 text-xs text-txt2">
                     {c.city && <><MapPin size={10} />{c.city}</>}
                   </div>
@@ -265,6 +378,11 @@ export default function ContactsPage() {
                 {/* Mobile card */}
                 <div className="md:hidden px-4 py-3">
                   <div className="flex items-center gap-3">
+                    {isAdmin && (
+                      <button onClick={(e) => toggleCheck(c.id, e)} className="shrink-0">
+                        {checked.has(c.id) ? <CheckSquare size={18} className="text-accent" /> : <Square size={18} className="text-txt3" />}
+                      </button>
+                    )}
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-xs font-bold text-accent shrink-0">
                       {c.firstName?.charAt(0)}
                     </div>
@@ -276,7 +394,9 @@ export default function ContactsPage() {
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-xs text-txt2">
                         {c.phone && <span className="flex items-center gap-1"><Phone size={10} />{c.phone}</span>}
-                        {c.city && <span className="flex items-center gap-1"><MapPin size={10} />{c.city}</span>}
+                        {isAdmin && c.agentId && getAgentName(c.agentId) && (
+                          <span className="text-purple text-[10px] font-bold">{getAgentName(c.agentId)}</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -341,6 +461,33 @@ export default function ContactsPage() {
               )}
 
               <div className="pt-3 border-t border-border space-y-2">
+                {isAdmin && (
+                  <div className="flex justify-between text-xs items-center">
+                    <span className="text-txt3">Agent</span>
+                    <select
+                      value={selected.agentId || ""}
+                      onChange={async (e) => {
+                        const newAgentId = e.target.value;
+                        try {
+                          const res = await fetch(`/api/contacts/${selected.id}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ agentId: newAgentId }),
+                          });
+                          if (!res.ok) throw new Error();
+                          setSelected({ ...selected, agentId: newAgentId });
+                          setContacts(p => p.map(c => c.id === selected.id ? { ...c, agentId: newAgentId } : c));
+                        } catch {
+                          setError("Nepodarilo se zmenit agenta");
+                        }
+                      }}
+                      className="text-[10px] font-bold bg-transparent border-none p-0 pr-4 appearance-none cursor-pointer text-purple"
+                    >
+                      <option value="">Neprideleno</option>
+                      {agents.filter(a => a.role === "agent").map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div className="flex justify-between text-xs">
                   <span className="text-txt3">Faze</span>
                   <div className="relative">
@@ -378,13 +525,65 @@ export default function ContactsPage() {
                 </div>
               )}
 
-              {user?.role !== "agent" && (
+              {isAdmin && (
                 <div className="pt-3 border-t border-border">
                   <button onClick={() => deleteContact(selected.id)} className="text-xs text-red hover:text-red/80 transition-colors">
                     Smazat kontakt
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign modal */}
+      {showAssign && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="glass rounded-2xl border border-border w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <h3 className="font-bold flex items-center gap-2"><UserCheck size={18} className="text-purple" /> Pridelit kontakty</h3>
+              <button onClick={() => setShowAssign(false)} className="text-txt3 hover:text-txt"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-txt2">
+                Vybrano <span className="font-bold text-txt">{checked.size}</span> kontaktu k prideleni
+              </p>
+              <div>
+                <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-2 block">Pridelit agentovi</label>
+                <div className="space-y-2">
+                  {agents.filter(a => a.role === "agent" && a.active).map(a => (
+                    <button
+                      key={a.id}
+                      onClick={() => setAssignAgent(a.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left ${
+                        assignAgent === a.id
+                          ? "border-purple bg-purple/10 text-purple"
+                          : "border-border hover:border-purple/30 hover:bg-surface2/50"
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple/20 to-accent/20 flex items-center justify-center text-xs font-bold text-purple shrink-0">
+                        {a.name.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="font-medium text-sm">{a.name}</div>
+                        <div className="text-[10px] text-txt3">{a.email}</div>
+                      </div>
+                      {assignAgent === a.id && <CheckSquare size={16} className="ml-auto text-purple" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-border">
+              <button onClick={() => { setShowAssign(false); setAssignAgent(""); }} className="btn-ghost text-sm">Zrusit</button>
+              <button onClick={doAssign} disabled={!assignAgent || assigning} className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2">
+                {assigning ? (
+                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Prideluji...</>
+                ) : (
+                  <><UserCheck size={14} /> Pridelit {checked.size} kontaktu</>
+                )}
+              </button>
             </div>
           </div>
         </div>

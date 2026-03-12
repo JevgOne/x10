@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
   const projectId = url.searchParams.get("projectId");
   const databaseId = url.searchParams.get("databaseId");
   const stage = url.searchParams.get("stage");
+  const agentId = url.searchParams.get("agentId");
+  const unassigned = url.searchParams.get("unassigned");
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "100") || 100, 500);
   const offset = Math.max(parseInt(url.searchParams.get("offset") || "0") || 0, 0);
 
@@ -35,6 +37,14 @@ export async function GET(req: NextRequest) {
   if (projectId) conditions.push(eq(schema.contacts.projectId, projectId));
   if (databaseId) conditions.push(eq(schema.contacts.databaseId, databaseId));
   if (stage) conditions.push(eq(schema.contacts.pipelineStage, stage));
+
+  // Agent filter (admin/supervisor only)
+  if (agentId && user.role !== "agent") {
+    conditions.push(eq(schema.contacts.agentId, agentId));
+  }
+  if (unassigned === "true" && user.role !== "agent") {
+    conditions.push(eq(schema.contacts.agentId, user.id));
+  }
 
   // Agents can only see their own contacts
   if (user.role === "agent") {
