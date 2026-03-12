@@ -355,6 +355,47 @@ async function smartParseDOCX(data: ArrayBuffer): Promise<ParsedContact[]> {
   return parseContactRows(rawRows);
 }
 
+async function smartParsePDF(data: ArrayBuffer): Promise<ParsedContact[]> {
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const allLines: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    let lastY: number | null = null;
+    let line = "";
+
+    for (const item of content.items) {
+      if (!("str" in item)) continue;
+      const ti = item as { str: string; transform: number[] };
+      const y = Math.round(ti.transform[5]);
+      if (lastY !== null && Math.abs(y - lastY) > 3) {
+        if (line.trim()) allLines.push(line.trim());
+        line = "";
+      }
+      line += (line ? "\t" : "") + ti.str;
+      lastY = y;
+    }
+    if (line.trim()) allLines.push(line.trim());
+  }
+
+  // Split lines into columns
+  const rawRows: unknown[][] = allLines.map(line => {
+    if (line.includes("\t")) return line.split("\t").map(v => v.trim()).filter(v => v);
+    if (line.includes(";")) return line.split(";").map(v => v.trim());
+    if ((line.match(/,/g) || []).length >= 2) return line.split(",").map(v => v.trim());
+    // Try splitting by multiple spaces (common in PDFs)
+    const parts = line.split(/\s{2,}/).map(v => v.trim()).filter(v => v);
+    if (parts.length >= 2) return parts;
+    return [line.trim()];
+  });
+
+  return parseContactRows(rawRows);
+}
+
 function getDbAge(uploadDate: string): { label: string; color: string } {
   if (!uploadDate) return { label: "", color: "" };
   const now = new Date();
@@ -437,6 +478,8 @@ export default function DatabasesPage() {
     let contacts: ParsedContact[];
     if (ext === "docx" || ext === "doc") {
       contacts = await smartParseDOCX(data);
+    } else if (ext === "pdf") {
+      contacts = await smartParsePDF(data);
     } else {
       contacts = smartParseXLSX(data);
     }
@@ -763,9 +806,9 @@ export default function DatabasesPage() {
                 >
                   <Upload size={36} className="mx-auto mb-3 text-txt3" />
                   <p className="text-sm font-medium mb-1">Kliknete pro nahrani souboru</p>
-                  <p className="text-xs text-txt3">Podporovane formaty: .xlsx, .xls, .docx</p>
+                  <p className="text-xs text-txt3">Podporovane formaty: .xlsx, .xls, .docx, .pdf</p>
                 </div>
-                <input ref={fileRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleFile} className="hidden" />
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.docx,.doc,.pdf" onChange={handleFile} className="hidden" />
               </div>
             )}
 
