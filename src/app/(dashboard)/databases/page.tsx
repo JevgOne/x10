@@ -91,10 +91,92 @@ function parseCurrencyValue(val: string): number {
   return Math.round(parseFloat(match[0])) || 0;
 }
 
-function smartParseXLSX(data: ArrayBuffer): ParsedContact[] {
-  const wb = XLSX.read(data, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+function isPhoneLike(v: string): boolean {
+  const stripped = v.replace(/[\s\-\(\)\+\.]/g, "");
+  return /^\d{9,15}$/.test(stripped);
+}
+
+function isEmailLike(v: string): boolean {
+  return /^[\w.+-]+@[\w.-]+\.\w{2,}$/.test(v.trim());
+}
+
+function inferColumnType(values: string[], colIndex: number, assigned: Set<string>): string {
+  if (values.length === 0) return `__col${colIndex}`;
+  const total = values.length;
+  const rate = (fn: (v: string) => boolean) => values.filter(fn).length / total;
+
+  const phoneRate = rate(isPhoneLike);
+  const emailRate = rate(isEmailLike);
+  const stageRate = rate(v => STAGE_MAP[v.trim().toLowerCase()] != null);
+  const genderRate = rate(v => /^[ČčMmŽž]$/.test(v.trim()));
+  const numericRate = rate(v => {
+    const cleaned = v.replace(/[\s.,kKčČcCzZkK€$]/gi, "");
+    return /^\d{4,}$/.test(cleaned);
+  });
+  const textRate = rate(v =>
+    /^[A-Za-z\u00C0-\u024F\s.'\-]+$/.test(v) && v.length > 1 && !/\d/.test(v)
+  );
+
+  const MIN = 0.3;
+  if (phoneRate >= MIN && !assigned.has("telefon")) return "telefon";
+  if (emailRate >= MIN && !assigned.has("email")) return "email";
+  if (stageRate >= MIN && !assigned.has("stav")) return "stav";
+  if (genderRate >= MIN && !assigned.has("pohlavi")) return "pohlavi";
+  if (numericRate >= MIN && !assigned.has("hodnota")) return "hodnota";
+  if (textRate >= MIN && !assigned.has("jmeno")) return "jmeno";
+  if (textRate >= MIN && !assigned.has("mesto")) return "mesto";
+  return `__col${colIndex}`;
+}
+
+function parseContactRows(rawRows: unknown[][]): ParsedContact[] {
+  if (rawRows.length === 0) return [];
+
+  const firstRow = (rawRows[0] as unknown[]).map(v => String(v ?? "").trim());
+
+  // Detect if first row is a header row
+  const knownHeaderRe = /^(jm[eé]no|name|p[rř][ií]jmen[ií]|kontakt|tel(efon)?|phone|mobil|email|e-?mail|adresa|address|m[eě]sto|city|obec|stav|stage|hodnota|value|[čc][aá]stka|amount|investice|velikost|suma|objem|k[čc]|czk|cena|price|ps[čc]|zip|povol[aá]n[ií]|pozn[aá]mka|note|k[rř]estn[ií]|first|last|f[aá]ze|pozice|pr[aá]ce|datum|pohlav[ií]|gender|teplota|temperature|typ|status|pipeline|z[ií]sk[aá]no|etapa)$/i;
+  const headerLikeCount = firstRow.filter(v => v && knownHeaderRe.test(v)).length;
+  const dataLikeCount = firstRow.filter(v => isPhoneLike(v) || isEmailLike(v)).length;
+  const hasHeaders = headerLikeCount >= 2 && dataLikeCount === 0;
+
+  let rows: Record<string, string>[];
+
+  if (hasHeaders) {
+    // First row is headers, rest is data
+    const headerRow = firstRow;
+    rows = rawRows.slice(1).map(row => {
+      const obj: Record<string, string> = {};
+      headerRow.forEach((h, i) => {
+        obj[h] = String((row as unknown[])[i] ?? "").trim();
+      });
+      return obj;
+    });
+  } else {
+    // Headerless file: infer column types from data values
+    const colCount = Math.max(...rawRows.slice(0, 50).map(r => (r as unknown[]).length));
+    const sampleSize = Math.min(20, rawRows.length);
+    const assigned = new Set<string>();
+    const colNames: string[] = [];
+
+    for (let col = 0; col < colCount; col++) {
+      const sampleValues = rawRows
+        .slice(0, sampleSize)
+        .map(r => String((r as unknown[])[col] ?? "").trim())
+        .filter(v => v.length > 0);
+      const name = inferColumnType(sampleValues, col, assigned);
+      assigned.add(name);
+      colNames.push(name);
+    }
+
+    rows = rawRows.map(row => {
+      const obj: Record<string, string> = {};
+      for (let i = 0; i < colCount; i++) {
+        obj[colNames[i]] = String((row as unknown[])[i] ?? "").trim();
+      }
+      return obj;
+    });
+  }
+
   if (rows.length === 0) return [];
 
   const headers = Object.keys(rows[0]);
@@ -223,6 +305,56 @@ function smartParseXLSX(data: ArrayBuffer): ParsedContact[] {
   });
 }
 
+function smartParseXLSX(data: ArrayBuffer): ParsedContact[] {
+  const wb = XLSX.read(data, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as unknown[][];
+  return parseContactRows(rawRows);
+}
+
+async function smartParseDOCX(data: ArrayBuffer): Promise<ParsedContact[]> {
+  const mammoth = await import("mammoth/mammoth.browser");
+  const convert = mammoth.default?.convertToHtml || mammoth.convertToHtml;
+  const extractText = mammoth.default?.extractRawText || mammoth.extractRawText;
+
+  const result = await convert({ arrayBuffer: data });
+  const html = result.value;
+
+  // Try to extract tables from HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const tables = doc.querySelectorAll("table");
+
+  if (tables.length > 0) {
+    // Use the largest table
+    let bestTable = tables[0];
+    tables.forEach(t => {
+      if (t.rows.length > bestTable.rows.length) bestTable = t;
+    });
+
+    const rawRows: unknown[][] = Array.from(bestTable.rows).map(row =>
+      Array.from(row.cells).map(cell => (cell.textContent || "").trim())
+    );
+    return parseContactRows(rawRows);
+  }
+
+  // No tables - parse text lines
+  const textResult = await extractText({ arrayBuffer: data });
+  const lines = textResult.value.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+
+  // Split lines by tabs, semicolons, or commas
+  const rawRows: unknown[][] = lines.map((line: string) => {
+    if (line.includes("\t")) return line.split("\t").map(v => v.trim());
+    if (line.includes(";")) return line.split(";").map(v => v.trim());
+    // For comma: only split if line has multiple comma-separated segments
+    const commaCount = (line.match(/,/g) || []).length;
+    if (commaCount >= 2) return line.split(",").map(v => v.trim());
+    return [line.trim()];
+  });
+
+  return parseContactRows(rawRows);
+}
+
 function getDbAge(uploadDate: string): { label: string; color: string } {
   if (!uploadDate) return { label: "", color: "" };
   const now = new Date();
@@ -301,7 +433,13 @@ export default function DatabasesPage() {
     if (!file) return;
     setImportName(file.name.replace(/\.[^.]+$/, ""));
     const data = await file.arrayBuffer();
-    const contacts = smartParseXLSX(data);
+    const ext = file.name.toLowerCase().split(".").pop();
+    let contacts: ParsedContact[];
+    if (ext === "docx" || ext === "doc") {
+      contacts = await smartParseDOCX(data);
+    } else {
+      contacts = smartParseXLSX(data);
+    }
     setParsed(contacts);
     setImportStep("preview");
   };
@@ -625,9 +763,9 @@ export default function DatabasesPage() {
                 >
                   <Upload size={36} className="mx-auto mb-3 text-txt3" />
                   <p className="text-sm font-medium mb-1">Kliknete pro nahrani souboru</p>
-                  <p className="text-xs text-txt3">Podporovane formaty: .xlsx, .xls</p>
+                  <p className="text-xs text-txt3">Podporovane formaty: .xlsx, .xls, .docx</p>
                 </div>
-                <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.docx,.doc" onChange={handleFile} className="hidden" />
               </div>
             )}
 
