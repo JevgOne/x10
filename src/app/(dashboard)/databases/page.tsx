@@ -42,7 +42,12 @@ interface ParsedContact {
   city: string;
   address: string;
   potentialValue: number;
+  pipelineStage: string;
+  hotCold: string;
+  occupation: string;
+  note: string;
   valid: boolean;
+  rawExtra: Record<string, string>;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -56,6 +61,35 @@ const STAGE_COLORS: Record<string, string> = {
   jednani: "bg-purple-500/20 text-purple-400", smlouva: "bg-indigo-500/20 text-indigo-400",
   uzavreno: "bg-green-500/20 text-green-400", ztraceno: "bg-red-500/20 text-red-400",
 };
+
+// Map Czech stage names to pipeline stage keys
+const STAGE_MAP: Record<string, string> = {
+  "novy": "novy", "nový": "novy", "new": "novy",
+  "kontaktovany": "kontaktovany", "kontaktovaný": "kontaktovany", "contacted": "kontaktovany",
+  "zajem": "zajem", "zájem": "zajem", "interest": "zajem",
+  "nabidka": "nabidka", "nabídka": "nabidka", "offer": "nabidka",
+  "jednani": "jednani", "jednání": "jednani", "meeting": "jednani", "negotiation": "jednani",
+  "smlouva": "smlouva", "contract": "smlouva",
+  "uzavreno": "uzavreno", "uzavřeno": "uzavreno", "closed": "uzavreno",
+  "ziskano": "uzavreno", "získáno": "uzavreno", "won": "uzavreno", "gained": "uzavreno",
+  "ztraceno": "ztraceno", "lost": "ztraceno", "ztracený": "ztraceno",
+};
+
+function parseStage(val: string): string {
+  const clean = val.trim().toLowerCase();
+  return STAGE_MAP[clean] || "";
+}
+
+function parseCurrencyValue(val: string): number {
+  // Handle values like "280 000.00 Kč", "250000", "1 650 000 CZK"
+  const cleaned = String(val || "")
+    .replace(/[kKčČcCzZkK€$]/gi, "")
+    .replace(/\s/g, "")
+    .replace(",", ".");
+  const match = cleaned.match(/[\d.]+/);
+  if (!match) return 0;
+  return Math.round(parseFloat(match[0])) || 0;
+}
 
 function smartParseXLSX(data: ArrayBuffer): ParsedContact[] {
   const wb = XLSX.read(data, { type: "array" });
@@ -74,14 +108,47 @@ function smartParseXLSX(data: ArrayBuffer): ParsedContact[] {
   const emailCol = detect([/email|mail|e-mail/i]);
   const cityCol = detect([/město|mesto|city|obec/i]);
   const addressCol = detect([/adresa|address|ulice/i]);
-  const valueCol = detect([/hodnota|value|castka|částka|amount|investice/i]);
+  const valueCol = detect([/hodnota|value|castka|částka|amount|investice|velikost|suma|objem|kč|czk|cena|price/i]);
+  const stageCol = detect([/stav|stage|fáze|faze|status|pipeline|získáno|ziskano|fáze|etapa/i]);
+  const occupationCol = detect([/povolání|povolani|occupation|profese|job|práce|prace|pozice/i]);
+  const noteCol = detect([/poznamka|poznámka|note|notes|komentář|komentar|popis/i]);
+  const hotColdCol = detect([/teplota|temperature|hot|cold|warm|typ\s*kontaktu/i]);
 
   const phoneRegex = /(?:\+?\d[\d\s\-()]{6,})/;
   const emailRegex = /[\w.+-]+@[\w.-]+\.\w+/;
 
+  // Auto-detect value column by checking first row for currency-like values
+  let autoValueCol: string | undefined;
+  if (!valueCol) {
+    for (const h of headers) {
+      const val = String(rows[0][h] || "");
+      if (/\d[\d\s]*[.,]\d{2}\s*(kč|czk|Kč)/i.test(val) || /^\d[\d\s]{3,}$/.test(val.trim())) {
+        autoValueCol = h;
+        break;
+      }
+    }
+  }
+  const effectiveValueCol = valueCol || autoValueCol;
+
+  // Auto-detect stage column by checking if column values match known stages
+  let autoStageCol: string | undefined;
+  if (!stageCol) {
+    for (const h of headers) {
+      const val = String(rows[0][h] || "").trim().toLowerCase();
+      if (STAGE_MAP[val]) {
+        autoStageCol = h;
+        break;
+      }
+    }
+  }
+  const effectiveStageCol = stageCol || autoStageCol;
+
+  // Track which columns were used for specific fields
+  const usedCols = new Set([nameCol, firstNameCol, lastNameCol, phoneCol, emailCol, cityCol, addressCol, effectiveValueCol, effectiveStageCol, occupationCol, noteCol, hotColdCol].filter(Boolean));
+
   return rows.map((row) => {
     let firstName = "", lastName = "", phone = "", email = "", city = "", address = "";
-    let potentialValue = 0;
+    let potentialValue = 0, pipelineStage = "", hotCold = "", occupation = "", note = "";
 
     if (firstNameCol && lastNameCol) {
       firstName = String(row[firstNameCol] || "").trim();
@@ -111,11 +178,24 @@ function smartParseXLSX(data: ArrayBuffer): ParsedContact[] {
     if (cityCol) city = String(row[cityCol] || "").trim();
     if (addressCol) address = String(row[addressCol] || "").trim();
 
-    if (valueCol) {
-      const v = String(row[valueCol] || "").replace(/[^\d]/g, "");
-      potentialValue = parseInt(v) || 0;
+    if (effectiveValueCol) {
+      potentialValue = parseCurrencyValue(String(row[effectiveValueCol] || ""));
     }
 
+    if (effectiveStageCol) {
+      pipelineStage = parseStage(String(row[effectiveStageCol] || ""));
+    }
+
+    if (occupationCol) occupation = String(row[occupationCol] || "").trim();
+    if (noteCol) note = String(row[noteCol] || "").trim();
+    if (hotColdCol) {
+      const hc = String(row[hotColdCol] || "").trim().toLowerCase();
+      if (hc === "hot" || hc === "horký" || hc === "horky") hotCold = "hot";
+      else if (hc === "cold" || hc === "studený" || hc === "studeny") hotCold = "cold";
+      else if (hc === "warm" || hc === "teplý" || hc === "teply") hotCold = "warm";
+    }
+
+    // Fallback name detection
     if (!firstName && !lastName) {
       for (const h of headers) {
         const val = String(row[h] || "").trim();
@@ -129,8 +209,17 @@ function smartParseXLSX(data: ArrayBuffer): ParsedContact[] {
       }
     }
 
+    // Collect extra columns not mapped to specific fields
+    const rawExtra: Record<string, string> = {};
+    for (const h of headers) {
+      if (!usedCols.has(h)) {
+        const val = String(row[h] || "").trim();
+        if (val) rawExtra[h] = val;
+      }
+    }
+
     const valid = !!(firstName || lastName) && !!(phone || email);
-    return { firstName, lastName, phone, email, city, address, potentialValue, valid };
+    return { firstName, lastName, phone, email, city, address, potentialValue, pipelineStage, hotCold, occupation, note, valid, rawExtra };
   });
 }
 
@@ -249,6 +338,10 @@ export default function DatabasesPage() {
             city: c.city,
             address: c.address,
             potentialValue: c.potentialValue,
+            pipelineStage: c.pipelineStage || "novy",
+            hotCold: c.hotCold || "warm",
+            occupation: c.occupation,
+            note: c.note,
           })),
         }),
       });
@@ -558,15 +651,21 @@ export default function DatabasesPage() {
                   <input value={importName} onChange={(e) => setImportName(e.target.value)} className="w-full" />
                 </div>
 
-                <div className="bg-surface rounded-xl border border-border overflow-hidden max-h-[300px] overflow-y-auto">
-                  <div className="grid grid-cols-[2fr_1.5fr_2fr_1fr] gap-2 px-3 py-2 text-[10px] font-semibold text-txt3 border-b border-border sticky top-0 bg-surface">
-                    <span>Jmeno</span><span>Telefon</span><span>Email</span><span>Status</span>
+                <div className="bg-surface rounded-xl border border-border overflow-hidden max-h-[400px] overflow-y-auto">
+                  <div className="grid grid-cols-[1.5fr_1.2fr_1.5fr_1fr_0.8fr_0.5fr] gap-2 px-3 py-2 text-[10px] font-semibold text-txt3 border-b border-border sticky top-0 bg-surface z-10">
+                    <span>Jmeno</span><span>Telefon</span><span>Email</span><span>Hodnota</span><span>Faze</span><span></span>
                   </div>
-                  {parsed.slice(0, 50).map((c, i) => (
-                    <div key={i} className={`grid grid-cols-[2fr_1.5fr_2fr_1fr] gap-2 px-3 py-2 text-xs border-b border-border/50 ${!c.valid ? "opacity-40" : ""}`}>
+                  {parsed.slice(0, 100).map((c, i) => (
+                    <div key={i} className={`grid grid-cols-[1.5fr_1.2fr_1.5fr_1fr_0.8fr_0.5fr] gap-2 px-3 py-2 text-xs border-b border-border/50 ${!c.valid ? "opacity-40" : ""}`}>
                       <span className="truncate">{c.firstName} {c.lastName}</span>
                       <span className="truncate text-txt2">{c.phone}</span>
                       <span className="truncate text-txt2">{c.email}</span>
+                      <span className="truncate text-green font-mono text-[11px]">
+                        {c.potentialValue > 0 ? `${c.potentialValue.toLocaleString("cs-CZ")} Kc` : ""}
+                      </span>
+                      <span className={`truncate text-[10px] font-bold ${c.pipelineStage ? "text-accent" : "text-txt3"}`}>
+                        {STAGE_LABELS[c.pipelineStage] || ""}
+                      </span>
                       <span className={`text-[10px] font-bold ${c.valid ? "text-green" : "text-red"}`}>{c.valid ? "OK" : "Skip"}</span>
                     </div>
                   ))}
