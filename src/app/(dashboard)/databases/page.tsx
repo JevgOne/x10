@@ -356,7 +356,7 @@ async function smartParseDOCX(data: ArrayBuffer): Promise<ParsedContact[]> {
 }
 
 async function smartParsePDF(data: ArrayBuffer): Promise<ParsedContact[]> {
-  const pdfjsLib = await import("pdfjs-dist");
+  const pdfjsLib = await import("pdfjs-dist/build/pdf.mjs");
   pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 
   const pdf = await pdfjsLib.getDocument({ data }).promise;
@@ -368,9 +368,9 @@ async function smartParsePDF(data: ArrayBuffer): Promise<ParsedContact[]> {
     let lastY: number | null = null;
     let line = "";
 
-    for (const item of content.items) {
-      if (!("str" in item)) continue;
-      const ti = item as { str: string; transform: number[] };
+    for (const item of content.items as Array<{ str: string; transform: number[] }>) {
+      if (!item.str) continue;
+      const ti = item;
       const y = Math.round(ti.transform[5]);
       if (lastY !== null && Math.abs(y - lastY) > 3) {
         if (line.trim()) allLines.push(line.trim());
