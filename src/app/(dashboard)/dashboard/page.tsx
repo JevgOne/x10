@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Briefcase, Phone, TrendingUp, Clock, Database, FileText, FolderOpen, ArrowUpRight } from "lucide-react";
+import { Users, Briefcase, Phone, TrendingUp, Clock, Database, FileText, FolderOpen, Activity, UserCheck, PhoneCall, ArrowRight } from "lucide-react";
 
 interface Stats {
   contacts: number;
@@ -14,56 +14,37 @@ interface Stats {
   projects: number;
 }
 
-interface StageStats {
-  stage: string;
-  count: number;
-}
-
-interface CallStats {
-  result: string;
-  count: number;
-}
-
-interface HotColdStats {
-  hotCold: string;
-  count: number;
-}
-
-interface TopAgent {
-  agentName: string;
-  dealCount: number;
-  totalAmount: number;
-}
-
-interface RecentContact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  pipelineStage: string;
-  potentialValue: number;
-  projectName: string;
-}
+interface StageStats { stage: string; count: number }
+interface CallStats { result: string; count: number }
+interface HotColdStats { hotCold: string; count: number }
+interface TopAgent { agentName: string; dealCount: number; totalAmount: number }
 
 interface RecentDeal {
-  id: string;
-  amount: number;
-  product: string;
-  contactFirstName: string;
-  contactLastName: string;
-  projectName: string;
-  agentName: string;
+  id: string; amount: number; product: string;
+  contactFirstName: string; contactLastName: string;
+  projectName: string; agentName: string;
 }
 
-interface RecentCall {
-  id: string;
-  date: string;
-  time: string;
-  duration: number;
-  result: string;
-  type: string;
-  contactFirstName: string;
-  contactLastName: string;
+interface ActivityItem {
+  id: string; contactId: string; agentId: string;
+  type: string; detail: string; previousValue: string; newValue: string;
+  createdAt: string; contactFirstName: string; contactLastName: string; agentName: string;
 }
+
+interface AgentActivityRow {
+  agentId: string; agentName: string; type: string; count: number;
+}
+
+interface AgentCallRow {
+  agentId: string; agentName: string; count: number; totalDuration: number;
+}
+
+interface TouchedContact {
+  contactId: string; contactFirstName: string; contactLastName: string; contactPhone: string;
+  agentId: string; agentName: string; type: string; detail: string; createdAt: string;
+}
+
+interface UserInfo { role: string }
 
 const STAGE_LABELS: Record<string, string> = {
   novy: "Novy", kontaktovany: "Kontaktovany", zajem: "Zajem", nabidka: "Nabidka",
@@ -88,15 +69,29 @@ const RESULT_COLORS: Record<string, string> = {
   not_interested: "bg-orange-500", deal: "bg-cyan-500",
 };
 
+const ACTIVITY_TYPE_LABELS: Record<string, string> = {
+  call: "Hovor", stage_change: "Zmena faze", deal: "Obchod", assigned: "Prirazeni", note: "Poznamka",
+};
+
+const ACTIVITY_TYPE_COLORS: Record<string, string> = {
+  call: "text-blue-400", stage_change: "text-yellow-400", deal: "text-green-400",
+  assigned: "text-purple-400", note: "text-gray-400",
+};
+
 function formatCZK(amount: number) {
   return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 0 }).format(amount);
 }
 
-function formatDuration(seconds: number) {
-  if (!seconds) return "—";
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+function timeAgo(dateStr: string) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "prave ted";
+  if (mins < 60) return `pred ${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `pred ${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  return `pred ${days}d`;
 }
 
 export default function DashboardPage() {
@@ -105,26 +100,31 @@ export default function DashboardPage() {
   const [callStats, setCallStats] = useState<CallStats[]>([]);
   const [hotColdStats, setHotColdStats] = useState<HotColdStats[]>([]);
   const [topAgents, setTopAgents] = useState<TopAgent[]>([]);
-  const [recentContacts, setRecentContacts] = useState<RecentContact[]>([]);
   const [recentDeals, setRecentDeals] = useState<RecentDeal[]>([]);
-  const [recentCalls, setRecentCalls] = useState<RecentCall[]>([]);
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const [todayAgentActivity, setTodayAgentActivity] = useState<AgentActivityRow[]>([]);
+  const [todayAgentCalls, setTodayAgentCalls] = useState<AgentCallRow[]>([]);
+  const [todayTouchedContacts, setTodayTouchedContacts] = useState<TouchedContact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard")
-      .then((r) => r.json())
-      .then((d) => {
-        setStats(d.stats);
-        setStageStats(d.stageStats || []);
-        setCallStats(d.callStats || []);
-        setHotColdStats(d.hotColdStats || []);
-        setTopAgents(d.topAgents || []);
-        setRecentContacts(d.recentContacts || []);
-        setRecentDeals(d.recentDeals || []);
-        setRecentCalls(d.recentCalls || []);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch("/api/dashboard").then((r) => r.json()),
+      fetch("/api/auth/me").then((r) => r.json()),
+    ]).then(([d, u]) => {
+      setStats(d.stats);
+      setStageStats(d.stageStats || []);
+      setCallStats(d.callStats || []);
+      setHotColdStats(d.hotColdStats || []);
+      setTopAgents(d.topAgents || []);
+      setRecentDeals(d.recentDeals || []);
+      setRecentActivity(d.recentActivity || []);
+      setTodayAgentActivity(d.todayAgentActivity || []);
+      setTodayAgentCalls(d.todayAgentCalls || []);
+      setTodayTouchedContacts(d.todayTouchedContacts || []);
+      setUserInfo(u.user || null);
+    }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -135,6 +135,8 @@ export default function DashboardPage() {
     );
   }
   if (!stats) return <div className="text-red">Chyba nacitani dat</div>;
+
+  const isAdmin = userInfo?.role === "admin" || userInfo?.role === "supervisor";
 
   const cards = [
     { label: "Kontakty", value: stats.contacts, icon: Users, cls: "stat-blue", iconColor: "text-accent" },
@@ -150,6 +152,29 @@ export default function DashboardPage() {
   const totalContacts = stageStats.reduce((s, st) => s + st.count, 0) || 1;
   const totalCalls = callStats.reduce((s, st) => s + st.count, 0) || 1;
   const totalHotCold = hotColdStats.reduce((s, st) => s + st.count, 0) || 1;
+
+  // Build per-agent summary from today's data
+  const agentSummary = new Map<string, { name: string; calls: number; duration: number; stageChanges: number; deals: number; assigned: number; totalActions: number }>();
+  for (const row of todayAgentActivity) {
+    if (!agentSummary.has(row.agentId)) {
+      agentSummary.set(row.agentId, { name: row.agentName || "—", calls: 0, duration: 0, stageChanges: 0, deals: 0, assigned: 0, totalActions: 0 });
+    }
+    const ag = agentSummary.get(row.agentId)!;
+    ag.totalActions += row.count;
+    if (row.type === "call") ag.calls += row.count;
+    if (row.type === "stage_change") ag.stageChanges += row.count;
+    if (row.type === "deal") ag.deals += row.count;
+    if (row.type === "assigned") ag.assigned += row.count;
+  }
+  for (const row of todayAgentCalls) {
+    if (!agentSummary.has(row.agentId)) {
+      agentSummary.set(row.agentId, { name: row.agentName || "—", calls: 0, duration: 0, stageChanges: 0, deals: 0, assigned: 0, totalActions: 0 });
+    }
+    const ag = agentSummary.get(row.agentId)!;
+    ag.calls = Math.max(ag.calls, row.count);
+    ag.duration = Number(row.totalDuration) || 0;
+  }
+  const agentSummaryArr = Array.from(agentSummary.entries()).sort((a, b) => b[1].totalActions - a[1].totalActions);
 
   return (
     <div className="space-y-6">
@@ -168,9 +193,84 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Admin: Today's Operator Overview */}
+      {isAdmin && agentSummaryArr.length > 0 && (
+        <div className="glass rounded-2xl border border-border p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <UserCheck size={16} className="text-accent" />
+            <h2 className="text-sm font-bold">Dnesni prehled operatoru</h2>
+            <span className="text-[10px] font-mono text-txt3 ml-auto">{new Date().toLocaleDateString("cs-CZ")}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[10px] text-txt3 uppercase tracking-wider border-b border-border">
+                  <th className="text-left py-2 px-3">Operator</th>
+                  <th className="text-center py-2 px-3">Hovory</th>
+                  <th className="text-center py-2 px-3">Doba hovoru</th>
+                  <th className="text-center py-2 px-3">Zmeny faze</th>
+                  <th className="text-center py-2 px-3">Obchody</th>
+                  <th className="text-center py-2 px-3">Prirazeni</th>
+                  <th className="text-center py-2 px-3">Celkem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agentSummaryArr.map(([agentId, ag]) => (
+                  <tr key={agentId} className="border-b border-border/50 hover:bg-surface2 transition-colors">
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-[10px] font-bold text-accent">
+                          {ag.name.charAt(0)}
+                        </div>
+                        <span className="font-medium">{ag.name}</span>
+                      </div>
+                    </td>
+                    <td className="text-center py-2.5 px-3 font-mono">{ag.calls}</td>
+                    <td className="text-center py-2.5 px-3 font-mono text-txt3">
+                      {ag.duration > 0 ? `${Math.floor(ag.duration / 60)}m ${ag.duration % 60}s` : "—"}
+                    </td>
+                    <td className="text-center py-2.5 px-3 font-mono">{ag.stageChanges}</td>
+                    <td className="text-center py-2.5 px-3 font-mono text-green">{ag.deals}</td>
+                    <td className="text-center py-2.5 px-3 font-mono">{ag.assigned}</td>
+                    <td className="text-center py-2.5 px-3">
+                      <span className="bg-accent/10 text-accent text-xs font-bold px-2 py-0.5 rounded-full">{ag.totalActions}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Admin: Today's Touched Contacts */}
+      {isAdmin && todayTouchedContacts.length > 0 && (
+        <div className="glass rounded-2xl border border-border p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <PhoneCall size={16} className="text-green" />
+            <h2 className="text-sm font-bold">Dnes pouzite kontakty</h2>
+            <span className="text-[10px] font-mono text-txt3 ml-auto">{todayTouchedContacts.length} kontaktu</span>
+          </div>
+          <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+            {todayTouchedContacts.map((tc, i) => (
+              <div key={`${tc.contactId}-${i}`} className="flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-surface2 transition-colors text-sm">
+                <span className={`text-[10px] font-bold uppercase ${ACTIVITY_TYPE_COLORS[tc.type] || "text-txt3"}`}>
+                  {ACTIVITY_TYPE_LABELS[tc.type] || tc.type}
+                </span>
+                <span className="font-medium">{tc.contactFirstName} {tc.contactLastName}</span>
+                {tc.contactPhone && <span className="text-txt3 text-xs">{tc.contactPhone}</span>}
+                <ArrowRight size={10} className="text-txt3" />
+                <span className="text-xs text-txt3">{tc.agentName}</span>
+                {tc.detail && <span className="text-[10px] text-txt3 ml-auto truncate max-w-[200px]">{tc.detail}</span>}
+                <span className="text-[10px] text-txt3 shrink-0">{timeAgo(tc.createdAt)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Pipeline + Call stats row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Pipeline overview */}
         <div className="glass rounded-2xl border border-border p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-sm font-bold">Pipeline prehled</h2>
@@ -199,7 +299,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Call result stats */}
         <div className="glass rounded-2xl border border-border p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-sm font-bold">Vysledky hovoru</h2>
@@ -209,7 +308,6 @@ export default function DashboardPage() {
             <p className="text-sm text-txt3">Zadne hovory</p>
           ) : (
             <>
-              {/* Bar */}
               <div className="flex rounded-lg overflow-hidden h-8 mb-4">
                 {callStats.map((cs) => {
                   const pct = (cs.count / totalCalls) * 100;
@@ -225,7 +323,6 @@ export default function DashboardPage() {
                   );
                 })}
               </div>
-              {/* Legend */}
               <div className="grid grid-cols-2 gap-2">
                 {callStats.map((cs) => (
                   <div key={cs.result} className="flex items-center gap-2 text-xs">
@@ -242,7 +339,6 @@ export default function DashboardPage() {
 
       {/* Hot/Cold + Top Agents */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Hot/Cold distribution */}
         <div className="glass rounded-2xl border border-border p-6">
           <h2 className="text-sm font-bold mb-5">Distribuce kontaktu</h2>
           <div className="flex gap-4">
@@ -267,7 +363,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Top agents */}
         <div className="glass rounded-2xl border border-border p-6">
           <h2 className="text-sm font-bold mb-4">Top agenti</h2>
           {topAgents.length === 0 ? (
@@ -291,29 +386,35 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Recent contacts */}
+      {/* Recent activity timeline + Recent deals */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Activity timeline */}
         <div className="glass rounded-2xl border border-border p-5">
-          <h3 className="text-sm font-bold mb-4">Posledni kontakty</h3>
-          {recentContacts.length === 0 ? (
-            <p className="text-sm text-txt3">Zadne kontakty</p>
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={14} className="text-accent" />
+            <h3 className="text-sm font-bold">Posledni aktivita</h3>
+          </div>
+          {recentActivity.length === 0 ? (
+            <p className="text-sm text-txt3">Zadna aktivita</p>
           ) : (
-            <div className="space-y-2">
-              {recentContacts.map((c) => (
-                <div key={c.id} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-surface2 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
-                      {c.firstName?.charAt(0)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{c.firstName} {c.lastName}</div>
-                      <div className="text-[10px] text-txt3">{c.projectName || STAGE_LABELS[c.pipelineStage] || c.pipelineStage}</div>
-                    </div>
+            <div className="space-y-1.5 max-h-[350px] overflow-y-auto">
+              {recentActivity.map((a) => (
+                <div key={a.id} className="flex items-start gap-3 py-2 px-3 rounded-xl hover:bg-surface2 transition-colors">
+                  <div className={`text-[10px] font-bold uppercase mt-0.5 shrink-0 w-16 ${ACTIVITY_TYPE_COLORS[a.type] || "text-txt3"}`}>
+                    {ACTIVITY_TYPE_LABELS[a.type] || a.type}
                   </div>
-                  {c.potentialValue > 0 && (
-                    <span className="text-[10px] font-mono text-green shrink-0 ml-2">{formatCZK(c.potentialValue)}</span>
-                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm">
+                      <span className="font-medium">{a.contactFirstName} {a.contactLastName}</span>
+                      {a.detail && <span className="text-txt3 ml-1.5 text-xs">{a.detail}</span>}
+                    </div>
+                    {a.previousValue && a.newValue && (
+                      <div className="text-[10px] text-txt3 mt-0.5">
+                        {STAGE_LABELS[a.previousValue] || a.previousValue} <ArrowRight size={8} className="inline" /> {STAGE_LABELS[a.newValue] || a.newValue}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-txt3 mt-0.5">{a.agentName} &middot; {timeAgo(a.createdAt)}</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -339,43 +440,10 @@ export default function DashboardPage() {
                           ? `${d.contactFirstName || ""} ${d.contactLastName || ""}`.trim()
                           : d.product || "—"}
                       </div>
-                      <div className="text-[10px] text-txt3">{d.projectName || d.product}</div>
+                      <div className="text-[10px] text-txt3">{d.agentName} &middot; {d.projectName || d.product}</div>
                     </div>
                   </div>
                   <span className="text-sm font-mono text-green shrink-0 ml-2">{formatCZK(d.amount || 0)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Recent calls */}
-        <div className="glass rounded-2xl border border-border p-5">
-          <h3 className="text-sm font-bold mb-4">Posledni hovory</h3>
-          {recentCalls.length === 0 ? (
-            <p className="text-sm text-txt3">Zadne hovory</p>
-          ) : (
-            <div className="space-y-2">
-              {recentCalls.map((c) => (
-                <div key={c.id} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-surface2 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                      ["answered", "interested", "deal"].includes(c.result) ? "bg-green/10" : "bg-red/10"
-                    }`}>
-                      <Phone size={12} className={["answered", "interested", "deal"].includes(c.result) ? "text-green" : "text-red"} />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {c.contactFirstName || c.contactLastName
-                          ? `${c.contactFirstName || ""} ${c.contactLastName || ""}`.trim()
-                          : "—"}
-                      </div>
-                      <div className="text-[10px] text-txt3">{RESULT_LABELS[c.result] || c.result} &middot; {formatDuration(c.duration)}</div>
-                    </div>
-                  </div>
-                  {c.date && (
-                    <span className="text-[10px] text-txt3 shrink-0 ml-2">{new Date(c.date).toLocaleDateString("cs-CZ")}</span>
-                  )}
                 </div>
               ))}
             </div>

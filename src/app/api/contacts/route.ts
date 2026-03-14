@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, like, or, desc, and } from "drizzle-orm";
+import { eq, like, or, desc, and, isNull, gte } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId, escapeLike, sanitizeString } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
   const stage = url.searchParams.get("stage");
   const agentId = url.searchParams.get("agentId");
   const unassigned = url.searchParams.get("unassigned");
+  const touched = url.searchParams.get("touched"); // "today" or "never"
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "100") || 100, 500);
   const offset = Math.max(parseInt(url.searchParams.get("offset") || "0") || 0, 0);
 
@@ -43,7 +44,15 @@ export async function GET(req: NextRequest) {
     conditions.push(eq(schema.contacts.agentId, agentId));
   }
   if (unassigned === "true" && user.role !== "agent") {
-    conditions.push(eq(schema.contacts.agentId, user.id));
+    conditions.push(isNull(schema.contacts.agentId));
+  }
+
+  // Filter by touched status
+  if (touched === "today" && user.role !== "agent") {
+    const today = new Date().toISOString().split("T")[0];
+    conditions.push(gte(schema.contacts.lastContactDate, today));
+  } else if (touched === "never" && user.role !== "agent") {
+    conditions.push(isNull(schema.contacts.lastContactDate));
   }
 
   // Agents can only see their own contacts

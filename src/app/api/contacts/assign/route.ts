@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
             .update(schema.contacts)
             .set({ agentId })
             .where(eq(schema.contacts.id, contactId));
+          await logActivity(user.id, contactId, "assigned", `Prirazen agentovi ${agent[0].name}`, "", agentId);
           assigned++;
         } catch {
           // skip invalid contact ids
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
             .update(schema.contacts)
             .set({ agentId: targetAgentId })
             .where(eq(schema.contacts.id, contacts[i].id));
+          await logActivity(user.id, contacts[i].id, "assigned", "Auto-distribuce", "", targetAgentId);
           assigned++;
         } catch {
           // skip on error

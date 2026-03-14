@@ -140,6 +140,17 @@ export const documentNotes = sqliteTable("document_notes", {
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const contactActivity = sqliteTable("contact_activity", {
+  id: text("id").primaryKey(),
+  contactId: text("contact_id").references(() => contacts.id),
+  agentId: text("agent_id").references(() => users.id),
+  type: text("type").notNull(), // call, stage_change, deal, note, assigned
+  detail: text("detail"),
+  previousValue: text("previous_value"),
+  newValue: text("new_value"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const complianceLog = sqliteTable("compliance_log", {
   id: text("id").primaryKey(),
   contactId: text("contact_id").references(() => contacts.id),

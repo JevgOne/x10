@@ -77,6 +77,8 @@ export default function ContactsPage() {
   const [filterStage, setFilterStage] = useState("");
   const [filterDatabase, setFilterDatabase] = useState("");
   const [filterAgent, setFilterAgent] = useState("");
+  const [filterTouched, setFilterTouched] = useState("");
+  const [filterUnassigned, setFilterUnassigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Contact | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -112,6 +114,8 @@ export default function ContactsPage() {
       if (filterStage) params.set("stage", filterStage);
       if (filterDatabase) params.set("databaseId", filterDatabase);
       if (filterAgent) params.set("agentId", filterAgent);
+      if (filterTouched) params.set("touched", filterTouched);
+      if (filterUnassigned) params.set("unassigned", "true");
       params.set("limit", "500");
       const [cRes, pRes, dbRes] = await Promise.all([
         fetch(`/api/contacts?${params}`),
@@ -132,7 +136,7 @@ export default function ContactsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, filterProject, filterStage, filterDatabase, filterAgent]);
+  }, [search, filterProject, filterStage, filterDatabase, filterAgent, filterTouched, filterUnassigned]);
 
   useEffect(() => {
     const t = setTimeout(loadContacts, 300);
@@ -302,6 +306,24 @@ export default function ContactsPage() {
             </select>
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-txt3 pointer-events-none" />
           </div>
+          {isAdmin && (
+            <>
+              <div className="relative">
+                <select value={filterTouched} onChange={(e) => setFilterTouched(e.target.value)} className="text-sm pr-8 appearance-none">
+                  <option value="">Vsechny kontakty</option>
+                  <option value="today">Pouzite dnes</option>
+                  <option value="never">Nepouzite</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-txt3 pointer-events-none" />
+              </div>
+              <button
+                onClick={() => setFilterUnassigned(!filterUnassigned)}
+                className={`text-sm px-3 py-1.5 rounded-lg border transition-all ${filterUnassigned ? "bg-accent/10 border-accent text-accent" : "border-border text-txt3 hover:border-accent/30"}`}
+              >
+                Nepridelene
+              </button>
+            </>
+          )}
         </div>
 
         {/* Table */}

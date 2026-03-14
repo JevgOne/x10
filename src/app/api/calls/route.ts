@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { eq, desc, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId } from "@/lib/utils";
+import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,13 @@ export async function POST(req: NextRequest) {
         .update(schema.contacts)
         .set({ lastContactDate: body.date || new Date().toISOString().split("T")[0] })
         .where(eq(schema.contacts.id, body.contactId));
+
+      await logActivity(
+        body.agentId || user.id,
+        body.contactId,
+        "call",
+        `${body.type || "hovor"} - ${body.result || ""}`.trim()
+      );
     }
 
     return NextResponse.json({ id }, { status: 201 });

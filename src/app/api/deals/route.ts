@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { eq, desc, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId } from "@/lib/utils";
+import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,15 @@ export async function POST(req: NextRequest) {
       commissionSupervisor: body.commissionSupervisor || 0,
       commissionCompany: body.commissionCompany || 0,
     });
+
+    if (body.contactId) {
+      await logActivity(
+        body.agentId || user.id,
+        body.contactId,
+        "deal",
+        `${body.product || "obchod"} - ${body.amount || 0} CZK`
+      );
+    }
 
     return NextResponse.json({ id }, { status: 201 });
   } catch (e) {

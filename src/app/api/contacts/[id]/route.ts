@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 
@@ -47,8 +48,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   for (const key of allowed) { if (key in body) updates[key] = body[key]; }
   if (Object.keys(updates).length === 0) return NextResponse.json({ error: "Zadna platna pole" }, { status: 400 });
 
+  // Get current values for change tracking
+  let oldContact: { pipelineStage: string | null; agentId: string | null } | undefined;
+  if ("pipelineStage" in updates || "agentId" in updates) {
+    const cur = await db.select({ pipelineStage: schema.contacts.pipelineStage, agentId: schema.contacts.agentId })
+      .from(schema.contacts).where(eq(schema.contacts.id, id)).limit(1);
+    oldContact = cur[0];
+  }
+
   try {
     await db.update(schema.contacts).set(updates).where(eq(schema.contacts.id, id));
+
+    // Log stage change
+    if ("pipelineStage" in updates && oldContact && oldContact.pipelineStage !== updates.pipelineStage) {
+      await logActivity(user.id, id, "stage_change", "Zmena faze", oldContact.pipelineStage || "", String(updates.pipelineStage));
+    }
+    // Log agent reassignment
+    if ("agentId" in updates && oldContact && oldContact.agentId !== updates.agentId) {
+      await logActivity(user.id, id, "assigned", "Prirazen operatorovi", oldContact.agentId || "", String(updates.agentId));
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Update contact error:", e);

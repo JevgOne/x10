@@ -145,6 +145,16 @@ const migrations = [
     status TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS contact_activity (
+    id TEXT PRIMARY KEY,
+    contact_id TEXT REFERENCES contacts(id),
+    agent_id TEXT REFERENCES users(id),
+    type TEXT NOT NULL,
+    detail TEXT,
+    previous_value TEXT,
+    new_value TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 async function migrate() {
