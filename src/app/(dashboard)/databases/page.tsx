@@ -487,8 +487,11 @@ export default function DatabasesPage() {
     setImportStep("preview");
   };
 
+  const [importProgress, setImportProgress] = useState(0);
+
   const doImport = async () => {
     setImportStep("importing");
+    setImportProgress(0);
     try {
       const valid = parsed.filter((c) => c.valid);
 
@@ -505,30 +508,42 @@ export default function DatabasesPage() {
       if (!dbRes.ok) throw new Error("Chyba vytvareni databaze");
       const dbData = await dbRes.json();
 
-      const res = await fetch("/api/contacts/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          databaseId: dbData.id,
-          projectId: importProject || null,
-          contacts: valid.map((c) => ({
-            firstName: c.firstName,
-            lastName: c.lastName,
-            phone: c.phone,
-            email: c.email,
-            city: c.city,
-            address: c.address,
-            potentialValue: c.potentialValue,
-            pipelineStage: c.pipelineStage || "novy",
-            hotCold: c.hotCold || "warm",
-            occupation: c.occupation,
-            note: c.note,
-          })),
-        }),
-      });
-      if (!res.ok) throw new Error("Chyba importu kontaktu");
-      const result = await res.json();
-      setImportResult({ imported: result.imported || 0, errors: result.errors || 0 });
+      // Send in batches of 200 to avoid Vercel body size / timeout limits
+      const BATCH_SIZE = 200;
+      let totalImported = 0;
+      let totalErrors = 0;
+
+      for (let i = 0; i < valid.length; i += BATCH_SIZE) {
+        const batch = valid.slice(i, i + BATCH_SIZE);
+        const res = await fetch("/api/contacts/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            databaseId: dbData.id,
+            projectId: importProject || null,
+            contacts: batch.map((c) => ({
+              firstName: c.firstName,
+              lastName: c.lastName,
+              phone: c.phone,
+              email: c.email,
+              city: c.city,
+              address: c.address,
+              potentialValue: c.potentialValue,
+              pipelineStage: c.pipelineStage || "novy",
+              hotCold: c.hotCold || "warm",
+              occupation: c.occupation,
+              note: c.note,
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error("Chyba importu kontaktu");
+        const result = await res.json();
+        totalImported += result.imported || 0;
+        totalErrors += result.errors || 0;
+        setImportProgress(Math.min(i + BATCH_SIZE, valid.length));
+      }
+
+      setImportResult({ imported: totalImported, errors: totalErrors });
       setImportStep("done");
       load();
     } catch (e) {
@@ -865,6 +880,17 @@ export default function DatabasesPage() {
               <div className="p-12 text-center">
                 <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                 <p className="text-sm text-txt2">Importuji kontakty...</p>
+                {validCount > 0 && (
+                  <div className="mt-4 max-w-xs mx-auto">
+                    <div className="flex justify-between text-[10px] text-txt3 mb-1">
+                      <span>{importProgress} / {validCount}</span>
+                      <span>{Math.round((importProgress / validCount) * 100)}%</span>
+                    </div>
+                    <div className="h-2 bg-surface3 rounded-full overflow-hidden">
+                      <div className="h-full bg-accent rounded-full transition-all duration-300" style={{ width: `${(importProgress / validCount) * 100}%` }} />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
