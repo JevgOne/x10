@@ -151,6 +151,18 @@ export const contactActivity = sqliteTable("contact_activity", {
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const agentStatus = sqliteTable("agent_status", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").references(() => users.id).unique(),
+  status: text("status").notNull().default("offline"), // ready, busy, wrap_up, pause, offline
+  lastChange: text("last_change").default(sql`CURRENT_TIMESTAMP`),
+  currentContactId: text("current_contact_id").references(() => contacts.id),
+  todayCalls: integer("today_calls").default(0),
+  todayDeals: integer("today_deals").default(0),
+  todayInterested: integer("today_interested").default(0),
+  sessionStart: text("session_start"),
+});
+
 export const complianceLog = sqliteTable("compliance_log", {
   id: text("id").primaryKey(),
   contactId: text("contact_id").references(() => contacts.id),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Briefcase, Phone, TrendingUp, Clock, Database, FileText, FolderOpen, Activity, UserCheck, PhoneCall, ArrowRight } from "lucide-react";
+import { Users, Briefcase, Phone, TrendingUp, Clock, Database, FileText, FolderOpen, Activity, UserCheck, PhoneCall, ArrowRight, Radio } from "lucide-react";
 
 interface Stats {
   contacts: number;
@@ -42,6 +42,13 @@ interface AgentCallRow {
 interface TouchedContact {
   contactId: string; contactFirstName: string; contactLastName: string; contactPhone: string;
   agentId: string; agentName: string; type: string; detail: string; createdAt: string;
+}
+
+interface AgentStatusRow {
+  id: string; agentId: string; status: string; lastChange: string;
+  currentContactId: string | null; todayCalls: number; todayDeals: number;
+  todayInterested: number; sessionStart: string | null;
+  agentName: string; contactFirstName: string | null; contactLastName: string | null;
 }
 
 interface UserInfo { role: string }
@@ -105,6 +112,7 @@ export default function DashboardPage() {
   const [todayAgentActivity, setTodayAgentActivity] = useState<AgentActivityRow[]>([]);
   const [todayAgentCalls, setTodayAgentCalls] = useState<AgentCallRow[]>([]);
   const [todayTouchedContacts, setTodayTouchedContacts] = useState<TouchedContact[]>([]);
+  const [agentStatuses, setAgentStatuses] = useState<AgentStatusRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
@@ -112,7 +120,8 @@ export default function DashboardPage() {
     Promise.all([
       fetch("/api/dashboard").then((r) => r.json()),
       fetch("/api/auth/me").then((r) => r.json()),
-    ]).then(([d, u]) => {
+      fetch("/api/agent-status").then((r) => r.json()),
+    ]).then(([d, u, as]) => {
       setStats(d.stats);
       setStageStats(d.stageStats || []);
       setCallStats(d.callStats || []);
@@ -124,6 +133,7 @@ export default function DashboardPage() {
       setTodayAgentCalls(d.todayAgentCalls || []);
       setTodayTouchedContacts(d.todayTouchedContacts || []);
       setUserInfo(u.user || null);
+      setAgentStatuses(as.agentStatuses || []);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
@@ -152,6 +162,14 @@ export default function DashboardPage() {
   const totalContacts = stageStats.reduce((s, st) => s + st.count, 0) || 1;
   const totalCalls = callStats.reduce((s, st) => s + st.count, 0) || 1;
   const totalHotCold = hotColdStats.reduce((s, st) => s + st.count, 0) || 1;
+
+  const STATUS_BADGE: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+    ready: { label: "Pripraven", bg: "bg-green/10", text: "text-green", dot: "bg-green" },
+    busy: { label: "Vola", bg: "bg-red/10", text: "text-red", dot: "bg-red" },
+    wrap_up: { label: "Zapis", bg: "bg-yellow/10", text: "text-yellow", dot: "bg-yellow" },
+    pause: { label: "Pauza", bg: "bg-orange-500/10", text: "text-orange-400", dot: "bg-orange-400" },
+    offline: { label: "Offline", bg: "bg-surface3/50", text: "text-txt3", dot: "bg-txt3" },
+  };
 
   // Build per-agent summary from today's data
   const agentSummary = new Map<string, { name: string; calls: number; duration: number; stageChanges: number; deals: number; assigned: number; totalActions: number }>();
@@ -192,6 +210,62 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Admin/Supervisor: Agent Status */}
+      {isAdmin && agentStatuses.length > 0 && (
+        <div className="glass rounded-2xl border border-border p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <Radio size={16} className="text-green" />
+            <h2 className="text-sm font-bold">Stav agentu</h2>
+            <span className="text-[10px] font-mono text-txt3 ml-auto">
+              {agentStatuses.filter((a) => a.status !== "offline").length} online
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {agentStatuses
+              .sort((a, b) => {
+                const order = ["busy", "wrap_up", "ready", "pause", "offline"];
+                return order.indexOf(a.status) - order.indexOf(b.status);
+              })
+              .map((ag) => {
+                const badge = STATUS_BADGE[ag.status] || STATUS_BADGE.offline;
+                const contactName = ag.contactFirstName || ag.contactLastName
+                  ? `${ag.contactFirstName || ""} ${ag.contactLastName || ""}`.trim()
+                  : null;
+                return (
+                  <div key={ag.id} className="bg-surface2/50 rounded-xl border border-border/50 p-4 hover:bg-surface2 transition-colors">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-accent/20 to-purple/20 flex items-center justify-center text-xs font-bold text-accent relative">
+                        {ag.agentName?.charAt(0) || "?"}
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ${badge.dot} border-2 border-surface`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{ag.agentName || "—"}</div>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${badge.bg} ${badge.text}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                    </div>
+                    {(ag.status === "busy" || ag.status === "wrap_up") && contactName && (
+                      <div className="text-xs text-txt2 mb-2 truncate">
+                        <Phone size={10} className="inline mr-1 text-accent" />
+                        {contactName}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 text-[10px] text-txt3 font-mono">
+                      <span title="Hovory dnes">{ag.todayCalls || 0} hov.</span>
+                      <span title="Zajem dnes" className="text-emerald-400">{ag.todayInterested || 0} zaj.</span>
+                      <span title="Obchody dnes" className="text-green">{ag.todayDeals || 0} deal</span>
+                    </div>
+                    {ag.lastChange && (
+                      <div className="text-[9px] text-txt3 mt-2">{timeAgo(ag.lastChange)}</div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Admin: Today's Operator Overview */}
       {isAdmin && agentSummaryArr.length > 0 && (

@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   LayoutDashboard, Users, Briefcase, Phone, FolderOpen,
   Database, Target, LogOut, ChevronLeft, Menu,
-  UserCog, X, Handshake, PhoneForwarded,
+  UserCog, X, Handshake, PhoneForwarded, CalendarDays, PhoneOutgoing,
 } from "lucide-react";
 
 interface User {
@@ -18,6 +18,7 @@ interface User {
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/call-mode", label: "Hovorovy rezim", icon: PhoneOutgoing },
   { href: "/contacts", label: "Kontakty", icon: Users },
   { href: "/databases", label: "Databáze", icon: Database },
   { href: "/pipeline", label: "Pipeline", icon: Target },
@@ -25,6 +26,7 @@ const NAV = [
   { href: "/calls", label: "Hovory", icon: Phone },
   { href: "/deals", label: "Dealy", icon: Handshake },
   { href: "/callbacks", label: "Callbacky", icon: PhoneForwarded },
+  { href: "/calendar", label: "Kalendář", icon: CalendarDays },
   { href: "/documents", label: "Dokumenty", icon: FolderOpen },
 ];
 
