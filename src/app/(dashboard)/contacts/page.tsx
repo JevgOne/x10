@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Plus, Phone, Mail, MapPin, ChevronRight, X, ChevronDown, Flame, Snowflake, UserCheck, CheckSquare, Square, Users } from "lucide-react";
+import { Search, Plus, Phone, Mail, MapPin, ChevronRight, X, ChevronDown, Flame, Snowflake, UserCheck, CheckSquare, Square, Users, PhoneOutgoing } from "lucide-react";
 
 interface Contact {
   id: string;
@@ -91,6 +91,12 @@ export default function ContactsPage() {
   const [showAssign, setShowAssign] = useState(false);
   const [assignAgent, setAssignAgent] = useState("");
   const [assigning, setAssigning] = useState(false);
+  // Quick call from detail panel
+  const [showQuickCall, setShowQuickCall] = useState(false);
+  const [quickCallResult, setQuickCallResult] = useState("answered");
+  const [quickCallNote, setQuickCallNote] = useState("");
+  const [quickCallDuration, setQuickCallDuration] = useState(0);
+  const [savingCall, setSavingCall] = useState(false);
 
   const isAdmin = user?.role === "admin" || user?.role === "supervisor";
 
@@ -236,6 +242,51 @@ export default function ContactsPage() {
   };
 
   const getAgentName = (agentId: string) => agents.find(a => a.id === agentId)?.name || "";
+
+  const CALL_RESULTS: Record<string, { label: string; color: string }> = {
+    answered: { label: "Zvedl", color: "bg-green/10 text-green border-green/30" },
+    not_answered: { label: "Nezvedl", color: "bg-red/10 text-red border-red/30" },
+    busy: { label: "Obsazeno", color: "bg-yellow/10 text-yellow border-yellow/30" },
+    voicemail: { label: "Hlasovka", color: "bg-purple/10 text-purple border-purple/30" },
+    callback: { label: "Callback", color: "bg-accent/10 text-accent border-accent/30" },
+    interested: { label: "Zajem", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
+    not_interested: { label: "Bez zajmu", color: "bg-orange-500/10 text-orange-400 border-orange-500/30" },
+    deal: { label: "Obchod", color: "bg-cyan-500/10 text-cyan-400 border-cyan-500/30" },
+  };
+
+  const saveQuickCall = async () => {
+    if (!selected) return;
+    setSavingCall(true);
+    try {
+      const now = new Date();
+      const res = await fetch("/api/calls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: selected.id,
+          date: now.toISOString().split("T")[0],
+          time: now.toTimeString().slice(0, 5),
+          duration: quickCallDuration,
+          type: "outbound",
+          result: quickCallResult,
+          note: quickCallNote,
+        }),
+      });
+      if (!res.ok) throw new Error("Chyba ukladani hovoru");
+      setShowQuickCall(false);
+      setQuickCallResult("answered");
+      setQuickCallNote("");
+      setQuickCallDuration(0);
+      // Update last contact date in UI
+      const today = now.toISOString().split("T")[0];
+      setSelected({ ...selected, lastContactDate: today });
+      setContacts(p => p.map(c => c.id === selected.id ? { ...c, lastContactDate: today } : c));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba ukladani hovoru");
+    } finally {
+      setSavingCall(false);
+    }
+  };
 
   const totalValue = contacts.reduce((s, c) => s + (c.potentialValue || 0), 0);
 
@@ -536,6 +587,54 @@ export default function ContactsPage() {
                   <div className="flex justify-between text-xs">
                     <span className="text-txt3">Posledni kontakt</span>
                     <span className="text-txt2">{new Date(selected.lastContactDate).toLocaleDateString("cs-CZ")}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick call */}
+              <div className="pt-3 border-t border-border">
+                {!showQuickCall ? (
+                  <button
+                    onClick={() => setShowQuickCall(true)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20 transition-all text-sm font-medium"
+                  >
+                    <PhoneOutgoing size={15} /> Zapsat hovor
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-semibold text-txt3 uppercase tracking-wider">Rychly zapis hovoru</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {Object.entries(CALL_RESULTS).map(([key, { label, color }]) => (
+                        <button
+                          key={key}
+                          onClick={() => setQuickCallResult(key)}
+                          className={`text-[10px] font-bold py-2 px-2 rounded-lg border transition-all ${
+                            quickCallResult === key ? color : "border-border text-txt3 hover:border-border"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-txt3 mb-1 block">Doba (sec)</label>
+                      <input type="number" value={quickCallDuration || ""} onChange={(e) => setQuickCallDuration(Number(e.target.value))} className="w-full text-xs" placeholder="0" />
+                    </div>
+                    <textarea
+                      value={quickCallNote}
+                      onChange={(e) => setQuickCallNote(e.target.value)}
+                      placeholder="Poznamka k hovoru..."
+                      rows={2}
+                      className="w-full text-xs"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowQuickCall(false)} className="flex-1 text-xs py-2 rounded-lg bg-surface2 text-txt3 hover:bg-surface3 transition-all">
+                        Zrusit
+                      </button>
+                      <button onClick={saveQuickCall} disabled={savingCall} className="flex-1 text-xs py-2 rounded-lg bg-accent text-white font-medium hover:bg-accent/80 transition-all disabled:opacity-50">
+                        {savingCall ? "Ukladam..." : "Ulozit"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
