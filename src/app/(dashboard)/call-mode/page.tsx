@@ -176,6 +176,21 @@ export default function CallModePage() {
     fetch("/api/auth/me").then(r => r.json()).then(d => setUser(d.user || null)).catch(() => {});
   }, []);
 
+  /* ─── Sync agent status to backend ─── */
+  const syncStatus = useCallback(async (status: string, contactId?: string, incCalls = false, incDeals = false, incInterested = false) => {
+    try {
+      const body: Record<string, unknown> = { status, currentContactId: contactId || null };
+      if (incCalls) body.incrementCalls = true;
+      if (incDeals) body.incrementDeals = true;
+      if (incInterested) body.incrementInterested = true;
+      await fetch("/api/agent-status", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch { /* silently fail */ }
+  }, []);
+
   /* ─── Load queue ─── */
   const loadQueue = useCallback(async () => {
     try {
@@ -241,7 +256,11 @@ export default function CallModePage() {
 
   useEffect(() => {
     loadQueue();
-  }, [loadQueue]);
+    // Set agent status to ready on page load
+    syncStatus("ready");
+    // Set offline on unmount
+    return () => { syncStatus("offline"); };
+  }, [loadQueue, syncStatus]);
 
   /* ─── Load today stats ─── */
   const loadStats = useCallback(async () => {
@@ -272,6 +291,7 @@ export default function CallModePage() {
   /* ─── Wrap-up timer ─── */
   const startWrapup = useCallback(() => {
     setAgentStatus("wrapup");
+    syncStatus("wrap_up", current?.id);
     setWrapupRemaining(30);
     if (wrapupTimerRef.current) clearInterval(wrapupTimerRef.current);
     wrapupTimerRef.current = setInterval(() => {
@@ -279,17 +299,17 @@ export default function CallModePage() {
         if (prev <= 1) {
           if (wrapupTimerRef.current) clearInterval(wrapupTimerRef.current);
           wrapupTimerRef.current = null;
-          // Auto-advance to next contact
           setAgentStatus("ready");
           setQueueIndex((idx) => idx + 1);
           setCallNote("");
           setCallDuration(0);
+          syncStatus("ready");
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-  }, []);
+  }, [syncStatus, current?.id]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -309,6 +329,7 @@ export default function CallModePage() {
     setQueueIndex((idx) => idx + 1);
     setCallNote("");
     setCallDuration(0);
+    syncStatus("ready");
   };
 
   /* ─── Save call result ─── */
@@ -372,6 +393,9 @@ export default function CallModePage() {
       if (resultKey === "interested") setTodayInterested((p) => p + 1);
       if (resultKey === "deal") setTodayDeals((p) => p + 1);
 
+      // Sync stats to backend
+      syncStatus("wrap_up", current.id, true, resultKey === "deal", resultKey === "interested");
+
       // Start wrap-up
       startWrapup();
     } catch (e) {
@@ -422,6 +446,11 @@ export default function CallModePage() {
       setCallbackDate("");
       setCallbackTime("");
       setCallbackNote("");
+      setCallNote("");
+      setCallDuration(0);
+
+      // Sync call count to backend
+      syncStatus("wrap_up", current.id, true);
 
       startWrapup();
     } catch (e) {
@@ -445,8 +474,10 @@ export default function CallModePage() {
   const togglePause = () => {
     if (agentStatus === "paused") {
       setAgentStatus("ready");
+      syncStatus("ready", current?.id);
     } else if (agentStatus === "ready") {
       setAgentStatus("paused");
+      syncStatus("pause");
     }
   };
 

@@ -166,6 +166,23 @@ const migrations = [
     today_interested INTEGER DEFAULT 0,
     session_start TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS google_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id),
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    expires_at TEXT,
+    calendar_id TEXT DEFAULT 'primary',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS calendar_notes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) NOT NULL,
+    date TEXT NOT NULL,
+    text TEXT NOT NULL,
+    color TEXT DEFAULT 'accent',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 async function migrate() {

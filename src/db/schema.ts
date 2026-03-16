@@ -163,6 +163,25 @@ export const agentStatus = sqliteTable("agent_status", {
   sessionStart: text("session_start"),
 });
 
+export const googleTokens = sqliteTable("google_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: text("expires_at"),
+  calendarId: text("calendar_id").default("primary"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const calendarNotes = sqliteTable("calendar_notes", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id).notNull(),
+  date: text("date").notNull(),
+  text: text("text").notNull(),
+  color: text("color").default("accent"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const complianceLog = sqliteTable("compliance_log", {
   id: text("id").primaryKey(),
   contactId: text("contact_id").references(() => contacts.id),

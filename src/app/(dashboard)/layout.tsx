@@ -8,6 +8,7 @@ import {
   Database, Target, LogOut, ChevronLeft, Menu,
   UserCog, X, Handshake, PhoneForwarded, CalendarDays, PhoneOutgoing,
 } from "lucide-react";
+import { NotificationProvider, NotificationBell } from "@/components/notifications";
 
 interface User {
   id: string;
@@ -156,57 +157,61 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="flex min-h-screen">
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+    <NotificationProvider>
+      <div className="flex min-h-screen">
+        {/* Mobile overlay */}
+        {mobileOpen && (
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
 
-      {/* Sidebar - desktop */}
-      <aside
-        className={`${
-          collapsed ? "w-[68px]" : "w-[240px]"
-        } bg-surface flex-col transition-all duration-300 flex-shrink-0 border-r border-border hidden md:flex`}
-      >
-        {sidebarContent}
-      </aside>
+        {/* Sidebar - desktop */}
+        <aside
+          className={`${
+            collapsed ? "w-[68px]" : "w-[240px]"
+          } bg-surface flex-col transition-all duration-300 flex-shrink-0 border-r border-border hidden md:flex`}
+        >
+          {sidebarContent}
+        </aside>
 
-      {/* Sidebar - mobile drawer */}
-      <aside
-        className={`fixed inset-y-0 left-0 w-[280px] bg-surface flex flex-col border-r border-border z-50 transition-transform duration-300 md:hidden ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        {sidebarContent}
-      </aside>
+        {/* Sidebar - mobile drawer */}
+        <aside
+          className={`fixed inset-y-0 left-0 w-[280px] bg-surface flex flex-col border-r border-border z-50 transition-transform duration-300 md:hidden ${
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          {sidebarContent}
+        </aside>
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
-        {/* Top bar */}
-        <header className="h-14 md:h-16 border-b border-border flex items-center justify-between px-4 md:px-6 bg-surface/50 backdrop-blur-xl flex-shrink-0">
-          <div className="flex items-center gap-3">
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setMobileOpen(true)}
-              className="w-9 h-9 rounded-xl bg-surface2 flex items-center justify-center text-txt3 hover:text-txt transition-colors md:hidden"
-            >
-              <Menu size={18} />
-            </button>
-            <h2 className="text-sm font-semibold capitalize">
-              {pathname.replace("/", "").replace(/-/g, " ") || "Dashboard"}
-            </h2>
-          </div>
-          <div className="flex items-center gap-3" />
-        </header>
+        {/* Main area */}
+        <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+          {/* Top bar */}
+          <header className="h-14 md:h-16 border-b border-border flex items-center justify-between px-4 md:px-6 bg-surface/50 backdrop-blur-xl flex-shrink-0">
+            <div className="flex items-center gap-3">
+              {/* Mobile menu button */}
+              <button
+                onClick={() => setMobileOpen(true)}
+                className="w-9 h-9 rounded-xl bg-surface2 flex items-center justify-center text-txt3 hover:text-txt transition-colors md:hidden"
+              >
+                <Menu size={18} />
+              </button>
+              <h2 className="text-sm font-semibold capitalize">
+                {pathname.replace("/", "").replace(/-/g, " ") || "Dashboard"}
+              </h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <NotificationBell />
+            </div>
+          </header>
 
-        {/* Content */}
-        <main className="flex-1 overflow-auto p-4 md:p-6 grid-pattern">
-          <div className="animate-in">{children}</div>
-        </main>
+          {/* Content */}
+          <main className="flex-1 overflow-auto p-4 md:p-6 grid-pattern">
+            <div className="animate-in">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </NotificationProvider>
   );
 }
