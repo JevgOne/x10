@@ -98,6 +98,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       );
       setNotifications(cbs);
 
+      // Cleanup: remove entries from browserNotifiedRef that are no longer active
+      const activeIds = new Set(cbs.map((cb: CallbackNotification) => cb.id));
+      for (const id of browserNotifiedRef.current) {
+        if (!activeIds.has(id)) browserNotifiedRef.current.delete(id);
+      }
+
       // Check for callbacks within 15 minutes and trigger browser + toast
       const now = new Date();
       for (const cb of cbs) {
