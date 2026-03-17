@@ -182,6 +182,47 @@ export const calendarNotes = sqliteTable("calendar_notes", {
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const campaigns = sqliteTable("campaigns", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  projectId: text("project_id").references(() => projects.id),
+  startDate: text("start_date"),
+  endDate: text("end_date"),
+  status: text("status").default("active"), // active, paused, completed
+  dailyCallGoal: integer("daily_call_goal").default(0),
+  dailyDealGoal: integer("daily_deal_goal").default(0),
+  description: text("description"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const campaignAgents = sqliteTable("campaign_agents", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").references(() => campaigns.id),
+  agentId: text("agent_id").references(() => users.id),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const scripts = sqliteTable("scripts", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").references(() => campaigns.id),
+  name: text("name").notNull(),
+  type: text("type").default("general"), // intro, qualification, product, objection, closing, general
+  content: text("content").notNull(),
+  sortOrder: integer("sort_order").default(0),
+  active: integer("active", { mode: "boolean" }).default(true),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const knowledgeBase = sqliteTable("knowledge_base", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").references(() => campaigns.id),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  category: text("category").default("general"), // faq, product, process, general
+  sortOrder: integer("sort_order").default(0),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const complianceLog = sqliteTable("compliance_log", {
   id: text("id").primaryKey(),
   contactId: text("contact_id").references(() => contacts.id),

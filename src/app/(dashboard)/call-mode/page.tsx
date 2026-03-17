@@ -76,8 +76,10 @@ function formatCZK(amount: number) {
   return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 0 }).format(amount);
 }
 
-/* ─── Script sections ─── */
-const SCRIPT_SECTIONS = [
+/* ─── Fallback script sections (used when no DB scripts exist) ─── */
+interface ScriptSection { title: string; content: string; }
+
+const FALLBACK_SCRIPTS: ScriptSection[] = [
   {
     title: "Uvodni pozdrav",
     content: `Dobry den, tady [Vase jmeno] ze spolecnosti ECG Build. Volam Vam, protoze jsme identifikovali zajimavy investicni prilezitost v oblasti stavebnictvi a facility managementu, ktera by mohla byt pro Vas relevantni.
@@ -158,6 +160,8 @@ export default function CallModePage() {
   const [callbackDate, setCallbackDate] = useState("");
   const [callbackTime, setCallbackTime] = useState("");
   const [callbackNote, setCallbackNote] = useState("");
+  // Scripts (dynamic from DB)
+  const [scriptSections, setScriptSections] = useState<ScriptSection[]>(FALLBACK_SCRIPTS);
   // Script collapse
   const [openScripts, setOpenScripts] = useState<Set<number>>(new Set([0]));
   // Stats
@@ -287,6 +291,21 @@ export default function CallModePage() {
   useEffect(() => {
     loadStats();
   }, [loadStats]);
+
+  /* ─── Load scripts from DB ─── */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/scripts?active=true");
+        if (!res.ok) return;
+        const data = await res.json();
+        const dbScripts = data.scripts || [];
+        if (dbScripts.length > 0) {
+          setScriptSections(dbScripts.map((s: { name: string; content: string }) => ({ title: s.name, content: s.content })));
+        }
+      } catch { /* use fallback */ }
+    })();
+  }, []);
 
   /* ─── Wrap-up timer ─── */
   const startWrapup = useCallback(() => {
@@ -680,10 +699,10 @@ export default function CallModePage() {
           <div className="glass rounded-2xl border border-border overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center gap-2">
               <FileText size={16} className="text-accent" />
-              <h3 className="font-bold text-sm">Hovorovy skript - ECG Build</h3>
+              <h3 className="font-bold text-sm">Hovorovy skript</h3>
             </div>
             <div className="divide-y divide-border">
-              {SCRIPT_SECTIONS.map((section, idx) => (
+              {scriptSections.map((section, idx) => (
                 <div key={idx}>
                   <button
                     onClick={() => toggleScript(idx)}

@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Users, Briefcase, Phone, FolderOpen,
   Database, Target, LogOut, ChevronLeft, Menu, Search,
   UserCog, X, Handshake, PhoneForwarded, CalendarDays, PhoneOutgoing,
+  Megaphone, BookOpen,
 } from "lucide-react";
 import { NotificationProvider, NotificationBell } from "@/components/notifications";
 import { GlobalSearch } from "@/components/global-search";
@@ -30,6 +31,8 @@ const NAV = [
   { href: "/callbacks", label: "Callbacky", icon: PhoneForwarded },
   { href: "/calendar", label: "Kalendář", icon: CalendarDays },
   { href: "/documents", label: "Dokumenty", icon: FolderOpen },
+  { href: "/campaigns", label: "Kampaně", icon: Megaphone },
+  { href: "/knowledge-base", label: "Knowledge Base", icon: BookOpen },
 ];
 
 const ADMIN_NAV = [

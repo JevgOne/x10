@@ -183,6 +183,43 @@ const migrations = [
     color TEXT DEFAULT 'accent',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    project_id TEXT REFERENCES projects(id),
+    start_date TEXT,
+    end_date TEXT,
+    status TEXT DEFAULT 'active' CHECK(status IN ('active','paused','completed')),
+    daily_call_goal INTEGER DEFAULT 0,
+    daily_deal_goal INTEGER DEFAULT 0,
+    description TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS campaign_agents (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT REFERENCES campaigns(id),
+    agent_id TEXT REFERENCES users(id),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS scripts (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT REFERENCES campaigns(id),
+    name TEXT NOT NULL,
+    type TEXT DEFAULT 'general',
+    content TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS knowledge_base (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT REFERENCES campaigns(id),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    category TEXT DEFAULT 'general',
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 async function migrate() {
