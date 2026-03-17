@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Plus, Phone, Mail, MapPin, ChevronRight, X, ChevronDown, Flame, Snowflake, UserCheck, CheckSquare, Square, Users, PhoneOutgoing } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Plus, Phone, Mail, MapPin, ChevronRight, ChevronLeft as ChevronLeftIcon, X, ChevronDown, Flame, Snowflake, UserCheck, CheckSquare, Square, Users, PhoneOutgoing, ExternalLink, ArrowUpDown } from "lucide-react";
 
 interface Contact {
   id: string;
@@ -68,6 +69,7 @@ const EMPTY_CONTACT = {
 };
 
 export default function ContactsPage() {
+  const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [databases, setDatabases] = useState<DatabaseRecord[]>([]);
@@ -81,6 +83,11 @@ export default function ContactsPage() {
   const [filterUnassigned, setFilterUnassigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Contact | null>(null);
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [sortBy, setSortBy] = useState("created_desc");
+  const pageSize = 50;
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState(EMPTY_CONTACT);
   const [saving, setSaving] = useState(false);
@@ -112,6 +119,8 @@ export default function ContactsPage() {
     }).catch(() => {});
   }, [isAdmin]);
 
+  const totalPages = Math.ceil(total / pageSize);
+
   const loadContacts = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -122,7 +131,9 @@ export default function ContactsPage() {
       if (filterAgent) params.set("agentId", filterAgent);
       if (filterTouched) params.set("touched", filterTouched);
       if (filterUnassigned) params.set("unassigned", "true");
-      params.set("limit", "500");
+      params.set("limit", String(pageSize));
+      params.set("offset", String((page - 1) * pageSize));
+      params.set("sort", sortBy);
       const [cRes, pRes, dbRes] = await Promise.all([
         fetch(`/api/contacts?${params}`),
         fetch("/api/projects"),
@@ -132,6 +143,7 @@ export default function ContactsPage() {
       const cData = await cRes.json();
       const pData = await pRes.json();
       setContacts(cData.contacts || []);
+      setTotal(cData.total || 0);
       setProjects(pData.projects || []);
       if (dbRes.ok) {
         const dbData = await dbRes.json();
@@ -142,7 +154,10 @@ export default function ContactsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, filterProject, filterStage, filterDatabase, filterAgent, filterTouched, filterUnassigned]);
+  }, [search, filterProject, filterStage, filterDatabase, filterAgent, filterTouched, filterUnassigned, page, sortBy]);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [search, filterProject, filterStage, filterDatabase, filterAgent, filterTouched, filterUnassigned, sortBy]);
 
   useEffect(() => {
     const t = setTimeout(loadContacts, 300);
@@ -296,7 +311,7 @@ export default function ContactsPage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-xl font-bold">Kontakty</h1>
-            <p className="text-xs text-txt3 mt-1">{contacts.length} kontaktu &middot; {formatCZK(totalValue)} celkova hodnota</p>
+            <p className="text-xs text-txt3 mt-1">{total} kontaktů (str. {page}/{totalPages || 1}) &middot; {formatCZK(totalValue)} celková hodnota</p>
           </div>
           <div className="flex items-center gap-2">
             {isAdmin && checked.size > 0 && (
@@ -375,6 +390,18 @@ export default function ContactsPage() {
               </button>
             </>
           )}
+          <div className="relative">
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="text-sm pr-8 appearance-none">
+              <option value="created_desc">Nejnovější</option>
+              <option value="created_asc">Nejstarší</option>
+              <option value="name_asc">Jméno A-Z</option>
+              <option value="name_desc">Jméno Z-A</option>
+              <option value="value_desc">Hodnota ↓</option>
+              <option value="value_asc">Hodnota ↑</option>
+              <option value="last_contact_desc">Poslední kontakt</option>
+            </select>
+            <ArrowUpDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-txt3 pointer-events-none" />
+          </div>
         </div>
 
         {/* Table */}
@@ -400,7 +427,7 @@ export default function ContactsPage() {
               <div
                 key={c.id}
                 onClick={() => setSelected(c)}
-                className={`cursor-pointer transition-colors hover:bg-surface2/50 border-b border-border/50 ${
+                className={`cursor-pointer transition-colors hover:bg-surface2/50 border-b border-border/50 group ${
                   selected?.id === c.id ? "bg-accent/5 border-l-2 border-l-accent" : ""
                 } ${checked.has(c.id) ? "bg-purple/5" : ""}`}
               >
@@ -444,8 +471,15 @@ export default function ContactsPage() {
                       {STAGE_LABELS[c.pipelineStage] || c.pipelineStage}
                     </span>
                   </div>
-                  <div className="flex items-center justify-end text-xs font-mono text-green">
-                    {formatCZK(c.potentialValue)}
+                  <div className="flex items-center justify-end gap-2">
+                    <span className="text-xs font-mono text-green">{formatCZK(c.potentialValue)}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); router.push(`/contacts/${c.id}`); }}
+                      className="opacity-0 group-hover:opacity-100 text-txt3 hover:text-accent transition-all"
+                      title="Otevřít profil"
+                    >
+                      <ExternalLink size={12} />
+                    </button>
                   </div>
                 </div>
                 {/* Mobile card */}
@@ -486,6 +520,54 @@ export default function ContactsPage() {
             ))
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 px-2">
+            <div className="text-xs text-txt3">
+              {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, total)} z {total}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-2 rounded-lg text-txt3 hover:text-txt hover:bg-surface2 transition-all disabled:opacity-30"
+              >
+                <ChevronLeftIcon size={16} />
+              </button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                let p: number;
+                if (totalPages <= 7) {
+                  p = i + 1;
+                } else if (page <= 4) {
+                  p = i + 1;
+                } else if (page >= totalPages - 3) {
+                  p = totalPages - 6 + i;
+                } else {
+                  p = page - 3 + i;
+                }
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                      page === p ? "bg-accent/10 text-accent" : "text-txt3 hover:text-txt hover:bg-surface2"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="p-2 rounded-lg text-txt3 hover:text-txt hover:bg-surface2 transition-all disabled:opacity-30"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Detail panel */}
@@ -637,6 +719,16 @@ export default function ContactsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* View full profile link */}
+              <div className="pt-3 border-t border-border">
+                <button
+                  onClick={() => router.push(`/contacts/${selected.id}`)}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-surface2 text-txt2 hover:text-accent hover:bg-surface3 transition-all text-sm font-medium"
+                >
+                  <ExternalLink size={14} /> Zobrazit profil
+                </button>
               </div>
 
               {selected.note && (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, desc, and, gte } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
+import { generateId, sanitizeString } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -49,4 +50,42 @@ export async function GET(req: NextRequest) {
     .limit(limit);
 
   return NextResponse.json({ activities });
+}
+
+export async function POST(req: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const body = await req.json();
+    if (!body.contactId) return NextResponse.json({ error: "Chybí contactId" }, { status: 400 });
+
+    // Verify contact ownership for agents
+    if (user.role === "agent") {
+      const contact = await db
+        .select({ agentId: schema.contacts.agentId })
+        .from(schema.contacts)
+        .where(eq(schema.contacts.id, body.contactId))
+        .limit(1);
+      if (!contact[0] || contact[0].agentId !== user.id) {
+        return NextResponse.json({ error: "Nedostatečná oprávnění" }, { status: 403 });
+      }
+    }
+
+    const id = generateId("act_");
+    await db.insert(schema.contactActivity).values({
+      id,
+      contactId: body.contactId,
+      agentId: user.id,
+      type: sanitizeString(body.type || "note", 50),
+      detail: sanitizeString(body.detail || "", 2000),
+      previousValue: body.previousValue || null,
+      newValue: body.newValue || null,
+    });
+
+    return NextResponse.json({ id }, { status: 201 });
+  } catch (e) {
+    console.error("Create activity error:", e);
+    return NextResponse.json({ error: "Chyba při vytváření záznamu" }, { status: 500 });
+  }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { eq, like, or, desc, and, isNull, gte } from "drizzle-orm";
+import { eq, like, or, desc, and, isNull, gte, sql, asc } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId, escapeLike, sanitizeString } from "@/lib/utils";
 
@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
   const touched = url.searchParams.get("touched"); // "today" or "never"
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "100") || 100, 500);
   const offset = Math.max(parseInt(url.searchParams.get("offset") || "0") || 0, 0);
+  const sortBy = url.searchParams.get("sort") || "created_desc";
 
   const query = db.select().from(schema.contacts);
 
@@ -60,13 +61,37 @@ export async function GET(req: NextRequest) {
     conditions.push(eq(schema.contacts.agentId, user.id));
   }
 
+  const whereClause = conditions.length > 0
+    ? (conditions.length === 1 ? conditions[0] : and(...conditions))
+    : undefined;
+
+  // Sort options
+  const orderMap: Record<string, ReturnType<typeof desc>> = {
+    created_desc: desc(schema.contacts.createdAt),
+    created_asc: asc(schema.contacts.createdAt),
+    name_asc: asc(schema.contacts.firstName),
+    name_desc: desc(schema.contacts.firstName),
+    value_desc: desc(schema.contacts.potentialValue),
+    value_asc: asc(schema.contacts.potentialValue),
+    last_contact_desc: desc(schema.contacts.lastContactDate),
+  };
+  const orderBy = orderMap[sortBy] || desc(schema.contacts.createdAt);
+
+  // Count total matching records
+  const countResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.contacts)
+    .where(whereClause);
+
+  const total = countResult[0]?.count || 0;
+
   const result = await query
-    .where(conditions.length > 0 ? (conditions.length === 1 ? conditions[0] : and(...conditions)) : undefined)
-    .orderBy(desc(schema.contacts.createdAt))
+    .where(whereClause)
+    .orderBy(orderBy)
     .limit(limit)
     .offset(offset);
 
-  return NextResponse.json({ contacts: result });
+  return NextResponse.json({ contacts: result, total });
 }
 
 export async function POST(req: NextRequest) {

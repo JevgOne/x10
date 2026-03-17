@@ -5,10 +5,11 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   LayoutDashboard, Users, Briefcase, Phone, FolderOpen,
-  Database, Target, LogOut, ChevronLeft, Menu,
+  Database, Target, LogOut, ChevronLeft, Menu, Search,
   UserCog, X, Handshake, PhoneForwarded, CalendarDays, PhoneOutgoing,
 } from "lucide-react";
 import { NotificationProvider, NotificationBell } from "@/components/notifications";
+import { GlobalSearch } from "@/components/global-search";
 
 interface User {
   id: string;
@@ -202,6 +203,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </h2>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => window.dispatchEvent(new Event("open-search"))}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface2 border border-border text-txt3 hover:text-txt hover:border-border2 transition-all text-xs"
+              >
+                <Search size={14} />
+                <span className="hidden sm:inline">Hledat</span>
+                <kbd className="hidden sm:inline text-[10px] bg-surface3 px-1 py-0.5 rounded border border-border ml-1">⌘K</kbd>
+              </button>
               <NotificationBell />
             </div>
           </header>
@@ -212,6 +221,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </div>
       </div>
+      <GlobalSearch />
     </NotificationProvider>
   );
 }
