@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db, schema } from "@/db";
 import { eq, like, or, desc, and, isNull, gte, sql, asc } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
-import { generateId, escapeLike, sanitizeString } from "@/lib/utils";
+import { generateId, escapeLike, sanitizeString, normalizePhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -100,14 +100,40 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+
+    // Normalize phone numbers
+    const phone = body.phone ? normalizePhone(sanitizeString(body.phone, 30)) : "";
+    const phoneAlt = body.phoneAlt ? normalizePhone(sanitizeString(body.phoneAlt, 30)) : "";
+
+    // Check DNC list
+    if (phone) {
+      const dnc = await db.select({ id: schema.dncList.id }).from(schema.dncList)
+        .where(eq(schema.dncList.phone, phone)).limit(1);
+      if (dnc.length > 0) {
+        return NextResponse.json({ error: "Číslo je na DNC listu (Do Not Call)" }, { status: 409 });
+      }
+    }
+
+    // Check for duplicate phone
+    if (phone) {
+      const dup = await db.select({ id: schema.contacts.id, firstName: schema.contacts.firstName, lastName: schema.contacts.lastName })
+        .from(schema.contacts).where(eq(schema.contacts.phone, phone)).limit(1);
+      if (dup.length > 0) {
+        return NextResponse.json({
+          error: `Kontakt s tímto číslem již existuje: ${dup[0].firstName} ${dup[0].lastName}`,
+          duplicateId: dup[0].id,
+        }, { status: 409 });
+      }
+    }
+
     const id = generateId("c_");
 
     await db.insert(schema.contacts).values({
       id,
       firstName: sanitizeString(body.firstName, 100),
       lastName: sanitizeString(body.lastName, 100),
-      phone: sanitizeString(body.phone, 30),
-      phoneAlt: sanitizeString(body.phoneAlt, 30),
+      phone,
+      phoneAlt,
       email: sanitizeString(body.email, 254),
       dob: sanitizeString(body.dob, 10),
       gender: sanitizeString(body.gender, 10),

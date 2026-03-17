@@ -52,6 +52,8 @@ export const contacts = sqliteTable("contacts", {
   occupation: text("occupation"),
   competitiveIntel: text("competitive_intel"),
   note: text("note"),
+  gdprConsent: integer("gdpr_consent", { mode: "boolean" }).default(false),
+  consentDate: text("consent_date"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
   lastContactDate: text("last_contact_date"),
 });
@@ -220,6 +222,39 @@ export const knowledgeBase = sqliteTable("knowledge_base", {
   content: text("content").notNull(),
   category: text("category").default("general"), // faq, product, process, general
   sortOrder: integer("sort_order").default(0),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const dncList = sqliteTable("dnc_list", {
+  id: text("id").primaryKey(),
+  phone: text("phone").notNull().unique(),
+  reason: text("reason"),
+  addedBy: text("added_by").references(() => users.id),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const consentLog = sqliteTable("consent_log", {
+  id: text("id").primaryKey(),
+  contactId: text("contact_id").references(() => contacts.id),
+  type: text("type").notNull(), // call, email, sms, data_processing
+  status: text("status").notNull(), // granted, revoked
+  detail: text("detail"),
+  grantedBy: text("granted_by").references(() => users.id),
+  expiresAt: text("expires_at"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const tags = sqliteTable("tags", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  color: text("color").default("#6b7280"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const contactTags = sqliteTable("contact_tags", {
+  id: text("id").primaryKey(),
+  contactId: text("contact_id").references(() => contacts.id),
+  tagId: text("tag_id").references(() => tags.id),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 

@@ -68,6 +68,24 @@ export function sanitizeString(input: unknown, maxLength = 500): string {
   return input.trim().slice(0, maxLength);
 }
 
+/** Normalize Czech phone number to +420XXXXXXXXX format */
+export function normalizePhone(input: string): string {
+  const digits = input.replace(/[\s\-\(\)\.]/g, "");
+  // Already has country code
+  if (/^\+420\d{9}$/.test(digits)) return digits;
+  if (/^00420\d{9}$/.test(digits)) return "+" + digits.slice(2);
+  // 9-digit Czech number without prefix
+  if (/^\d{9}$/.test(digits)) return "+420" + digits;
+  // Return cleaned input if we can't normalize
+  return digits;
+}
+
+/** Validate Czech phone number */
+export function isValidCZPhone(phone: string): boolean {
+  const normalized = normalizePhone(phone);
+  return /^\+420[1-9]\d{8}$/.test(normalized);
+}
+
 /** Sanitize number input */
 export function sanitizeNumber(input: unknown, min = 0, max = 999_999_999): number {
   const num = Number(input);

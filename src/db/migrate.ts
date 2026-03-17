@@ -220,6 +220,41 @@ const migrations = [
     sort_order INTEGER DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS dnc_list (
+    id TEXT PRIMARY KEY,
+    phone TEXT NOT NULL UNIQUE,
+    reason TEXT,
+    added_by TEXT REFERENCES users(id),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS consent_log (
+    id TEXT PRIMARY KEY,
+    contact_id TEXT REFERENCES contacts(id),
+    type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    detail TEXT,
+    granted_by TEXT REFERENCES users(id),
+    expires_at TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    color TEXT DEFAULT '#6b7280',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS contact_tags (
+    id TEXT PRIMARY KEY,
+    contact_id TEXT REFERENCES contacts(id),
+    tag_id TEXT REFERENCES tags(id),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+];
+
+// ALTER TABLE migrations (safe to re-run — errors are silently ignored)
+const alterMigrations = [
+  `ALTER TABLE contacts ADD COLUMN gdpr_consent INTEGER DEFAULT 0`,
+  `ALTER TABLE contacts ADD COLUMN consent_date TEXT`,
 ];
 
 async function migrate() {
@@ -232,6 +267,15 @@ async function migrate() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`  ✗ ${tableName}: ${msg}`);
+    }
+  }
+  console.log("Running ALTER migrations...");
+  for (const sql of alterMigrations) {
+    try {
+      await client.execute(sql);
+      console.log(`  ✓ ${sql.slice(0, 60)}...`);
+    } catch {
+      // Column likely already exists — ignore
     }
   }
   console.log("Migrations complete.");

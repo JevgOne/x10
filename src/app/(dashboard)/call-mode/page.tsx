@@ -201,16 +201,19 @@ export default function CallModePage() {
       setLoading(true);
       // Fetch contacts (agents see only theirs, admin sees all)
       const params = new URLSearchParams({ limit: "500" });
-      const [cRes, cbRes] = await Promise.all([
+      const [cRes, cbRes, dncRes] = await Promise.all([
         fetch(`/api/contacts?${params}`),
         fetch("/api/callbacks?completed=false"),
+        fetch("/api/dnc"),
       ]);
       if (!cRes.ok) throw new Error("Chyba nacitani kontaktu");
 
       const cData = await cRes.json();
       const cbData = cbRes.ok ? await cbRes.json() : { callbacks: [] };
+      const dncData = dncRes.ok ? await dncRes.json() : { dnc: [] };
 
-      const contacts: Contact[] = cData.contacts || [];
+      const dncPhones = new Set((dncData.dnc || []).map((d: { phone: string }) => d.phone));
+      const contacts: Contact[] = (cData.contacts || []).filter((c: Contact) => !dncPhones.has(c.phone));
       const callbacks: Callback[] = cbData.callbacks || [];
 
       // Build set of contact IDs that have overdue/pending callbacks

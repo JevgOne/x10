@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Edit2, X, Shield, UserCog, Check, Ban } from "lucide-react";
+import { Plus, Edit2, X, Shield, UserCog, Check, Ban, Lock, PhoneOff, Trash2 } from "lucide-react";
 
 interface User {
   id: string;
@@ -25,6 +25,8 @@ const ROLE_COLORS: Record<string, string> = {
   agent: "bg-accent/10 text-accent border-accent/20",
 };
 
+interface DncEntry { id: string; phone: string; reason: string; addedByName: string; createdAt: string; }
+
 const EMPTY_USER = { name: "", email: "", password: "", role: "agent", phone: "" };
 
 export default function SettingsPage() {
@@ -35,8 +37,20 @@ export default function SettingsPage() {
   const [form, setForm] = useState(EMPTY_USER);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
   const [loadError, setLoadError] = useState("");
+
+  // Password change
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState("");
+
+  // DNC list
+  const [dncList, setDncList] = useState<DncEntry[]>([]);
+  const [dncPhone, setDncPhone] = useState("");
+  const [dncReason, setDncReason] = useState("");
+  const [dncSaving, setDncSaving] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ role: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +66,55 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => setCurrentUser(d.user || null)).catch(() => {});
+    fetch("/api/dnc").then(r => r.ok ? r.json() : { dnc: [] }).then(d => setDncList(d.dnc || [])).catch(() => {});
+  }, []);
+
+  const changePassword = async () => {
+    setPwSaving(true); setPwMsg("");
+    try {
+      const res = await fetch("/api/auth/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: pwCurrent, newPassword: pwNew }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPwMsg(data.error || "Chyba"); return; }
+      setPwMsg("Heslo bylo změněno");
+      setPwCurrent(""); setPwNew("");
+    } catch { setPwMsg("Chyba připojení"); }
+    finally { setPwSaving(false); }
+  };
+
+  const addDnc = async () => {
+    if (!dncPhone.trim()) return;
+    setDncSaving(true);
+    try {
+      const res = await fetch("/api/dnc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: dncPhone, reason: dncReason }),
+      });
+      if (res.ok) {
+        setDncPhone(""); setDncReason("");
+        const r = await fetch("/api/dnc");
+        if (r.ok) setDncList((await r.json()).dnc || []);
+      } else {
+        const d = await res.json();
+        setLoadError(d.error || "Chyba");
+      }
+    } catch { setLoadError("Chyba přidání na DNC"); }
+    setDncSaving(false);
+  };
+
+  const removeDnc = async (id: string) => {
+    await fetch("/api/dnc", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    setDncList(prev => prev.filter(d => d.id !== id));
+  };
+
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "supervisor";
 
   const openNew = () => {
     setForm(EMPTY_USER);
@@ -293,6 +356,61 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Password change */}
+      <div className="glass rounded-2xl border border-border p-5">
+        <h2 className="text-sm font-bold mb-3 flex items-center gap-2"><Lock size={14} className="text-accent" /> Změna hesla</h2>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Současné heslo</label>
+            <input type="password" value={pwCurrent} onChange={e => setPwCurrent(e.target.value)} className="w-48" />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Nové heslo</label>
+            <input type="password" value={pwNew} onChange={e => setPwNew(e.target.value)} className="w-48" placeholder="Min. 8 znaků, A-z, 0-9" />
+          </div>
+          <button onClick={changePassword} disabled={pwSaving || !pwCurrent || !pwNew} className="btn-primary text-xs disabled:opacity-50">
+            {pwSaving ? "..." : "Změnit"}
+          </button>
+          {pwMsg && <span className={`text-xs ${pwMsg.includes("změněno") ? "text-green" : "text-red"}`}>{pwMsg}</span>}
+        </div>
+      </div>
+
+      {/* DNC List */}
+      {isAdmin && (
+        <div className="glass rounded-2xl border border-border p-5">
+          <h2 className="text-sm font-bold mb-3 flex items-center gap-2"><PhoneOff size={14} className="text-red" /> DNC List (Do Not Call)</h2>
+          <div className="flex flex-wrap gap-3 items-end mb-4">
+            <div>
+              <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Telefon</label>
+              <input value={dncPhone} onChange={e => setDncPhone(e.target.value)} className="w-48" placeholder="+420..." />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Důvod</label>
+              <input value={dncReason} onChange={e => setDncReason(e.target.value)} className="w-48" placeholder="Volitelný" />
+            </div>
+            <button onClick={addDnc} disabled={dncSaving || !dncPhone.trim()} className="btn-primary text-xs disabled:opacity-50">
+              {dncSaving ? "..." : "Přidat"}
+            </button>
+          </div>
+          {dncList.length > 0 ? (
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {dncList.map(d => (
+                <div key={d.id} className="flex items-center justify-between text-xs py-2 px-3 rounded-lg bg-surface2/50">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono font-bold">{d.phone}</span>
+                    {d.reason && <span className="text-txt3">— {d.reason}</span>}
+                    <span className="text-[10px] text-txt3">{d.addedByName}</span>
+                  </div>
+                  <button onClick={() => removeDnc(d.id)} className="text-txt3 hover:text-red"><Trash2 size={12} /></button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-txt3">Žádná čísla na DNC listu</p>
+          )}
         </div>
       )}
 
