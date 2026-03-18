@@ -228,6 +228,18 @@ export const knowledgeBase = sqliteTable("knowledge_base", {
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const automationRules = sqliteTable("automation_rules", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  trigger: text("trigger").notNull(), // no_contact_7d, no_contact_14d, no_contact_30d, stage_stale_7d, callback_overdue_3d
+  action: text("action").notNull(), // set_cold, set_lost, notify, move_stage
+  actionValue: text("action_value"), // target stage or notification text
+  active: integer("active", { mode: "boolean" }).default(true),
+  lastRun: text("last_run"),
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const emailTemplates = sqliteTable("email_templates", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

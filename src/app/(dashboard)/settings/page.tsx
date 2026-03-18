@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Edit2, X, Shield, UserCog, Check, Ban, Lock, PhoneOff, Trash2 } from "lucide-react";
+import { Plus, Edit2, X, Shield, UserCog, Check, Ban, Lock, PhoneOff, Trash2, Zap, Play } from "lucide-react";
 
 interface User {
   id: string;
@@ -26,6 +26,20 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 interface DncEntry { id: string; phone: string; reason: string; addedByName: string; createdAt: string; }
+interface AutoRule { id: string; name: string; trigger: string; action: string; actionValue: string; active: boolean; lastRun: string; createdByName: string; }
+
+const TRIGGER_LABELS: Record<string, string> = {
+  no_contact_7d: "7 dní bez kontaktu",
+  no_contact_14d: "14 dní bez kontaktu",
+  no_contact_30d: "30 dní bez kontaktu",
+  stage_stale_7d: "Fáze stagnuje 7 dní",
+  callback_overdue_3d: "Callback zpožděn 3+ dní",
+};
+const ACTION_LABELS: Record<string, string> = {
+  set_cold: "Nastavit COLD",
+  set_lost: "Přesunout do Ztraceno",
+  move_stage: "Přesunout do fáze...",
+};
 
 const EMPTY_USER = { name: "", email: "", password: "", role: "agent", phone: "" };
 
@@ -112,6 +126,79 @@ export default function SettingsPage() {
   const removeDnc = async (id: string) => {
     await fetch("/api/dnc", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     setDncList(prev => prev.filter(d => d.id !== id));
+  };
+
+  // Automation rules
+  const [autoRules, setAutoRules] = useState<AutoRule[]>([]);
+  const [showAutoModal, setShowAutoModal] = useState(false);
+  const [autoForm, setAutoForm] = useState({ name: "", trigger: "no_contact_7d", action: "set_cold", actionValue: "" });
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [autoResult, setAutoResult] = useState("");
+
+  useEffect(() => {
+    fetch("/api/automation").then(r => r.ok ? r.json() : { rules: [] }).then(d => setAutoRules(d.rules || [])).catch(() => {});
+  }, []);
+
+  const saveAutoRule = async () => {
+    if (!autoForm.name.trim()) return;
+    setAutoSaving(true);
+    try {
+      const res = await fetch("/api/automation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(autoForm),
+      });
+      if (res.ok) {
+        setShowAutoModal(false);
+        const r = await fetch("/api/automation");
+        if (r.ok) setAutoRules((await r.json()).rules || []);
+      }
+    } catch { setLoadError("Chyba uložení pravidla"); }
+    setAutoSaving(false);
+  };
+
+  const toggleAutoRule = async (id: string, active: boolean) => {
+    await fetch("/api/automation", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active: !active }),
+    });
+    setAutoRules(prev => prev.map(r => r.id === id ? { ...r, active: !active } : r));
+  };
+
+  const deleteAutoRule = async (id: string) => {
+    await fetch("/api/automation", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setAutoRules(prev => prev.filter(r => r.id !== id));
+  };
+
+  const runAutomation = async () => {
+    setAutoRunning(true); setAutoResult("");
+    try {
+      const res = await fetch("/api/automation/run", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        const total = (data.results || []).reduce((s: number, r: { affected: number }) => s + r.affected, 0);
+        setAutoResult(`Hotovo — ${total} kontaktů ovlivněno`);
+        const r = await fetch("/api/automation");
+        if (r.ok) setAutoRules((await r.json()).rules || []);
+      }
+    } catch { setAutoResult("Chyba spuštění"); }
+    setAutoRunning(false);
+  };
+
+  const runScoring = async () => {
+    setAutoRunning(true); setAutoResult("");
+    try {
+      const res = await fetch("/api/automation/score", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) setAutoResult(`Scoring hotovo — ${data.updated}/${data.processed} aktualizováno`);
+    } catch { setAutoResult("Chyba scoringu"); }
+    setAutoRunning(false);
   };
 
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "supervisor";
@@ -411,6 +498,92 @@ export default function SettingsPage() {
           ) : (
             <p className="text-xs text-txt3">Žádná čísla na DNC listu</p>
           )}
+        </div>
+      )}
+
+      {/* Automation */}
+      {currentUser?.role === "admin" && (
+        <div className="glass rounded-2xl border border-border p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold flex items-center gap-2"><Zap size={14} className="text-yellow" /> Automatizace</h2>
+            <div className="flex gap-2">
+              <button onClick={runScoring} disabled={autoRunning} className="btn-ghost text-xs flex items-center gap-1 disabled:opacity-50">
+                <Play size={10} /> Scoring
+              </button>
+              <button onClick={runAutomation} disabled={autoRunning} className="btn-ghost text-xs flex items-center gap-1 disabled:opacity-50">
+                <Play size={10} /> Spustit pravidla
+              </button>
+              <button onClick={() => setShowAutoModal(true)} className="btn-primary text-xs flex items-center gap-1">
+                <Plus size={12} /> Pravidlo
+              </button>
+            </div>
+          </div>
+          {autoResult && <p className="text-xs text-green mb-3">{autoResult}</p>}
+          {autoRules.length > 0 ? (
+            <div className="space-y-2">
+              {autoRules.map(r => (
+                <div key={r.id} className={`flex items-center justify-between text-xs py-2.5 px-3 rounded-lg ${r.active ? "bg-surface2/50" : "bg-surface2/20 opacity-50"}`}>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => toggleAutoRule(r.id, r.active)} className={`w-8 h-4 rounded-full transition-all ${r.active ? "bg-green" : "bg-surface3"}`}>
+                      <div className={`w-3 h-3 rounded-full bg-white transition-all ${r.active ? "ml-4" : "ml-0.5"}`} />
+                    </button>
+                    <div>
+                      <span className="font-medium">{r.name}</span>
+                      <span className="text-txt3 ml-2">{TRIGGER_LABELS[r.trigger]} → {ACTION_LABELS[r.action]}{r.actionValue ? ` (${r.actionValue})` : ""}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {r.lastRun && <span className="text-[10px] text-txt3">{new Date(r.lastRun).toLocaleString("cs-CZ")}</span>}
+                    <button onClick={() => deleteAutoRule(r.id)} className="text-txt3 hover:text-red"><Trash2 size={12} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-txt3">Žádná automatizační pravidla. Cron běží denně v 5:00 (scoring) a 6:00 (pravidla).</p>
+          )}
+        </div>
+      )}
+
+      {/* Auto rule modal */}
+      {showAutoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="glass rounded-2xl border border-border w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <h3 className="font-bold">Nové pravidlo</h3>
+              <button onClick={() => setShowAutoModal(false)} className="text-txt3 hover:text-txt"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Název</label>
+                <input value={autoForm.name} onChange={e => setAutoForm({ ...autoForm, name: e.target.value })} className="w-full" />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Trigger</label>
+                <select value={autoForm.trigger} onChange={e => setAutoForm({ ...autoForm, trigger: e.target.value })} className="w-full">
+                  {Object.entries(TRIGGER_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Akce</label>
+                <select value={autoForm.action} onChange={e => setAutoForm({ ...autoForm, action: e.target.value })} className="w-full">
+                  {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              {autoForm.action === "move_stage" && (
+                <div>
+                  <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Cílová fáze</label>
+                  <input value={autoForm.actionValue} onChange={e => setAutoForm({ ...autoForm, actionValue: e.target.value })} className="w-full" placeholder="např. ztraceno" />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-border">
+              <button onClick={() => setShowAutoModal(false)} className="btn-ghost text-sm">Zrušit</button>
+              <button onClick={saveAutoRule} disabled={autoSaving || !autoForm.name.trim()} className="btn-primary text-sm disabled:opacity-50">
+                {autoSaving ? "..." : "Vytvořit"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

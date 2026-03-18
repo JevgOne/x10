@@ -249,6 +249,17 @@ const migrations = [
     tag_id TEXT REFERENCES tags(id),
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS automation_rules (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    action TEXT NOT NULL,
+    action_value TEXT,
+    active INTEGER DEFAULT 1,
+    last_run TEXT,
+    created_by TEXT REFERENCES users(id),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
   `CREATE TABLE IF NOT EXISTS email_templates (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
