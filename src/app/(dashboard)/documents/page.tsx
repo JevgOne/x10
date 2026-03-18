@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, FileText, Search, Trash2, X, FolderOpen, ChevronDown } from "lucide-react";
+import { Plus, FileText, Search, Trash2, X, FolderOpen, ChevronDown, Upload, Download } from "lucide-react";
 
 interface Document {
   id: string;
@@ -13,6 +13,9 @@ interface Document {
   uploaderName?: string;
   uploadDate: string;
   note: string;
+  fileUrl?: string;
+  fileSize?: number;
+  mimeType?: string;
   createdAt: string;
 }
 
@@ -42,7 +45,13 @@ const CAT_COLORS: Record<string, string> = {
   ostatni: "bg-surface3 text-txt3",
 };
 
-const EMPTY_DOC = { name: "", category: "ostatni", contactId: "", note: "" };
+const EMPTY_DOC = { name: "", category: "ostatni", contactId: "", note: "", file: null as File | null };
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -78,17 +87,30 @@ export default function DocumentsPage() {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          category: form.category,
-          contactId: form.contactId || null,
-          note: form.note,
-          uploadDate: new Date().toISOString().split("T")[0],
-        }),
-      });
+      let res;
+      if (form.file) {
+        // Upload with file via FormData
+        const fd = new FormData();
+        fd.append("file", form.file);
+        fd.append("name", form.name || form.file.name);
+        fd.append("category", form.category);
+        if (form.contactId) fd.append("contactId", form.contactId);
+        if (form.note) fd.append("note", form.note);
+        res = await fetch("/api/upload", { method: "POST", body: fd });
+      } else {
+        // Metadata only
+        res = await fetch("/api/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: form.name,
+            category: form.category,
+            contactId: form.contactId || null,
+            note: form.note,
+            uploadDate: new Date().toISOString().split("T")[0],
+          }),
+        });
+      }
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Chyba ukládání"); }
       setShowModal(false);
       setForm(EMPTY_DOC);
@@ -212,10 +234,18 @@ export default function DocumentsPage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <FileText size={16} className="text-accent shrink-0" />
                       <span className="text-sm font-medium truncate">{doc.name}</span>
+                      {doc.fileSize ? <span className="text-[9px] text-txt3">{formatFileSize(doc.fileSize)}</span> : null}
                     </div>
-                    <button onClick={() => deleteDoc(doc.id)} className="text-txt3 hover:text-red opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
-                      <Trash2 size={13} />
-                    </button>
+                    <div className="flex gap-1 shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {doc.fileUrl && (
+                        <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="text-txt3 hover:text-accent" title="Stáhnout">
+                          <Download size={13} />
+                        </a>
+                      )}
+                      <button onClick={() => deleteDoc(doc.id)} className="text-txt3 hover:text-red">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
                   {(doc.contactFirstName || doc.contactLastName) && (
                     <p className="text-[11px] text-txt2 mb-1">Kontakt: {doc.contactFirstName} {doc.contactLastName}</p>
@@ -244,8 +274,21 @@ export default function DocumentsPage() {
             </div>
             <div className="p-5 space-y-4">
               <div>
+                <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Soubor</label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png,.csv"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    setForm({ ...form, file: f, name: form.name || f?.name || "" });
+                  }}
+                  className="w-full text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-accent/10 file:text-accent file:font-bold file:cursor-pointer"
+                />
+                {form.file && <p className="text-[10px] text-txt3 mt-1">{formatFileSize(form.file.size)}</p>}
+              </div>
+              <div>
                 <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Nazev</label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full" />
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full" placeholder={form.file?.name || ""} />
               </div>
               <div>
                 <label className="text-[10px] font-semibold text-txt3 uppercase tracking-wider mb-1 block">Kategorie</label>

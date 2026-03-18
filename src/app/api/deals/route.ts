@@ -4,6 +4,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId } from "@/lib/utils";
 import { logActivity } from "@/lib/activity";
+import { fireWebhooks } from "@/lib/webhooks";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    fireWebhooks("deal.created", { id, contactId: body.contactId, amount: body.amount, product: body.product });
     return NextResponse.json({ id }, { status: 201 });
   } catch (e) {
     console.error("Create deal error:", e);

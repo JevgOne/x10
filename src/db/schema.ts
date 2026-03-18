@@ -130,6 +130,9 @@ export const documents = sqliteTable("documents", {
   uploadedBy: text("uploaded_by").references(() => users.id),
   uploadDate: text("upload_date"),
   note: text("note"),
+  fileUrl: text("file_url"),
+  fileSize: integer("file_size").default(0),
+  mimeType: text("mime_type"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -222,6 +225,28 @@ export const knowledgeBase = sqliteTable("knowledge_base", {
   content: text("content").notNull(),
   category: text("category").default("general"), // faq, product, process, general
   sortOrder: integer("sort_order").default(0),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const emailTemplates = sqliteTable("email_templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  campaignId: text("campaign_id").references(() => campaigns.id),
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const webhooks = sqliteTable("webhooks", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  events: text("events").notNull(), // comma-separated: contact.created,deal.created,call.created
+  secret: text("secret"),
+  active: integer("active", { mode: "boolean" }).default(true),
+  lastTriggered: text("last_triggered"),
+  createdBy: text("created_by").references(() => users.id),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 

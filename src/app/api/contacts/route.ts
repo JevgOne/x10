@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { eq, like, or, desc, and, isNull, gte, sql, asc } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { generateId, escapeLike, sanitizeString, normalizePhone } from "@/lib/utils";
+import { fireWebhooks } from "@/lib/webhooks";
 
 export const dynamic = "force-dynamic";
 
@@ -152,6 +153,7 @@ export async function POST(req: NextRequest) {
       note: sanitizeString(body.note, 2000),
     });
 
+    fireWebhooks("contact.created", { id, firstName: body.firstName, lastName: body.lastName, phone });
     return NextResponse.json({ id }, { status: 201 });
   } catch (e) {
     console.error("Create contact error:", e);

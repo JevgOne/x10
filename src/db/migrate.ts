@@ -249,12 +249,35 @@ const migrations = [
     tag_id TEXT REFERENCES tags(id),
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS email_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    campaign_id TEXT REFERENCES campaigns(id),
+    created_by TEXT REFERENCES users(id),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS webhooks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    events TEXT NOT NULL,
+    secret TEXT,
+    active INTEGER DEFAULT 1,
+    last_triggered TEXT,
+    created_by TEXT REFERENCES users(id),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 // ALTER TABLE migrations (safe to re-run — errors are silently ignored)
 const alterMigrations = [
   `ALTER TABLE contacts ADD COLUMN gdpr_consent INTEGER DEFAULT 0`,
   `ALTER TABLE contacts ADD COLUMN consent_date TEXT`,
+  `ALTER TABLE documents ADD COLUMN file_url TEXT`,
+  `ALTER TABLE documents ADD COLUMN file_size INTEGER DEFAULT 0`,
+  `ALTER TABLE documents ADD COLUMN mime_type TEXT`,
 ];
 
 async function migrate() {
